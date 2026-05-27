@@ -1,0 +1,248 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+
+const STORAGE_KEY = 'bedroom_wardrobe_state'
+const THICKNESS = 60
+const DEFAULT_LEN = 260
+const MIN_LEN = 100
+const ROOM_W = 460
+const ROOM_H = 370
+const WALL_BUFFER = 2
+
+interface WardrobeState {
+  x: number
+  y: number
+  len: number
+  rotation: number
+}
+
+function clamp(v: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, v))
+}
+
+/** 根据旋转角计算旋转后包围盒并约束位置（宽=len, 高=THICKNESS） */
+function clampToRoom(x: number, y: number, len: number, rotation: number) {
+  const rad = (rotation * Math.PI) / 180
+  const cosR = Math.abs(Math.cos(rad))
+  const sinR = Math.abs(Math.sin(rad))
+  const rw = len * cosR + THICKNESS * sinR
+  const rh = len * sinR + THICKNESS * cosR
+  const xMin = rw / 2 - len / 2 + WALL_BUFFER
+  const xMax = ROOM_W - rw / 2 - len / 2 - WALL_BUFFER
+  const yMin = rh / 2 - THICKNESS / 2 + WALL_BUFFER
+  const yMax = ROOM_H - rh / 2 - THICKNESS / 2 - WALL_BUFFER
+  return {
+    x: clamp(x, xMin, Math.max(xMin, xMax)),
+    y: clamp(y, yMin, Math.max(yMin, yMax)),
+  }
+}
+
+function loadState(): WardrobeState {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (saved) {
+      const parsed: WardrobeState = JSON.parse(saved)
+      const clamped = clampToRoom(parsed.x, parsed.y, parsed.len, parsed.rotation)
+      return { ...parsed, ...clamped }
+    }
+  } catch {}
+  const len = DEFAULT_LEN
+  const x = (ROOM_W - len) / 2
+  const y = ROOM_H - THICKNESS - 20
+  return { x, y, len, rotation: 0 }
+}
+
+export default function Wardrobe() {
+  const [state, setState] = useState<WardrobeState>(loadState)
+  const stateRef = useRef(state)
+  stateRef.current = state
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+  }, [state])
+
+  // 拖拽移动
+  const onDragMouseDown = useCallback((e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('[data-rotate-handle],[data-resize-handle]')) return
+    e.preventDefault()
+    const startX = e.clientX
+    const startY = e.clientY
+    const origX = stateRef.current.x
+    const origY = stateRef.current.y
+    const onMove = (ev: MouseEvent) => {
+      const { len, rotation } = stateRef.current
+      const clamped = clampToRoom(origX + ev.clientX - startX, origY + ev.clientY - startY, len, rotation)
+      setState(prev => ({ ...prev, ...clamped }))
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [])
+
+  // 旋转
+  const onRotateClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    setState(prev => {
+      const newRotation = prev.rotation + 90
+      const clamped = clampToRoom(prev.x, prev.y, prev.len, newRotation)
+      return { ...clamped, len: prev.len, rotation: newRotation }
+    })
+  }, [])
+
+  // 右侧 handle：固定左端，改 len 并反推 x/y
+  const onResizeRightMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX = e.clientX
+    const startY = e.clientY
+    const { x: origX, y: origY, len: origLen, rotation: origRot } = stateRef.current
+    const rad = (origRot * Math.PI) / 180
+    const cos = Math.cos(rad), sin = Math.sin(rad)
+    // 固定左端绝对坐标
+    const cx0 = origX + origLen / 2, cy0 = origY + THICKNESS / 2
+    const leftEndX = cx0 - (origLen / 2) * cos
+    const leftEndY = cy0 - (origLen / 2) * sin
+    const onMove = (ev: MouseEvent) => {
+      const delta = (ev.clientX - startX) * cos + (ev.clientY - startY) * sin
+      const newLen = clamp(origLen + delta, MIN_LEN, ROOM_W)
+      const newCx = leftEndX + (newLen / 2) * cos
+      const newCy = leftEndY + (newLen / 2) * sin
+      setState(prev => ({ ...prev, x: newCx - newLen / 2, y: newCy - THICKNESS / 2, len: newLen }))
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [])
+
+  // 左侧 handle：固定右端，改 len 并反推 x/y
+  const onResizeLeftMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX = e.clientX
+    const startY = e.clientY
+    const { x: origX, y: origY, len: origLen, rotation: origRot } = stateRef.current
+    const rad = (origRot * Math.PI) / 180
+    const cos = Math.cos(rad), sin = Math.sin(rad)
+    // 固定右端绝对坐标
+    const cx0 = origX + origLen / 2, cy0 = origY + THICKNESS / 2
+    const rightEndX = cx0 + (origLen / 2) * cos
+    const rightEndY = cy0 + (origLen / 2) * sin
+    const onMove = (ev: MouseEvent) => {
+      const delta = -((ev.clientX - startX) * cos + (ev.clientY - startY) * sin)
+      const newLen = clamp(origLen + delta, MIN_LEN, ROOM_W)
+      const newCx = rightEndX - (newLen / 2) * cos
+      const newCy = rightEndY - (newLen / 2) * sin
+      setState(prev => ({ ...prev, x: newCx - newLen / 2, y: newCy - THICKNESS / 2, len: newLen }))
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [])
+
+  const { x, y, len, rotation } = state
+
+  // 柜门数量（每扇约65px宽）
+  const doorCount = Math.max(2, Math.round(len / 65))
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: x,
+        top: y,
+        width: len,
+        height: THICKNESS,
+        transform: `rotate(${rotation}deg)`,
+        transformOrigin: 'center',
+        cursor: 'grab',
+        userSelect: 'none',
+      }}
+      onMouseDown={onDragMouseDown}
+    >
+      {/* 柜体 */}
+      <div className="relative size-full overflow-hidden rounded-lg border border-amber-200/30 bg-gradient-to-b from-slate-700/80 to-slate-800/70 shadow-lg shadow-black/40">
+        {/* 顶部装饰线 */}
+        <div className="absolute inset-x-0 top-0 h-2 rounded-t-lg bg-slate-600/60 border-b border-amber-100/10" />
+        {/* 柜门分隔 */}
+        <div className="absolute inset-x-2 bottom-2 top-3 flex gap-1">
+          {Array.from({ length: doorCount }).map((_, i) => (
+            <div
+              key={i}
+              className="flex-1 rounded-sm border border-slate-500/50 bg-slate-700/50 flex items-center justify-center"
+            >
+              <div className="h-3 w-1 rounded-full bg-amber-200/40" />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 旋转按钮 */}
+      <div
+        data-rotate-handle
+        title="点击旋转 90°"
+        style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 10 }}
+        className="grid size-7 cursor-pointer place-items-center rounded-full border border-amber-100/40 bg-amber-300 shadow-md shadow-black/30 transition-transform hover:scale-110 active:scale-95"
+        onClick={onRotateClick}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-900">
+          <path d="M21 2v6h-6" />
+          <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+        </svg>
+      </div>
+
+      {/* 左侧长度调整 handle */}
+      <div
+        data-resize-handle
+        title="拖拽调整长度"
+        style={{
+          position: 'absolute',
+          left: -6,
+          top: '50%',
+          transform: 'translateY(-50%)',
+          zIndex: 10,
+          width: 12,
+          height: 28,
+          cursor: 'ew-resize',
+        }}
+        className="flex items-center justify-center rounded-sm border border-amber-200/50 bg-slate-600/80 hover:bg-amber-300/60"
+        onMouseDown={onResizeLeftMouseDown}
+      >
+        <div className="flex gap-0.5">
+          <div className="h-3 w-px rounded-full bg-amber-200/70" />
+          <div className="h-3 w-px rounded-full bg-amber-200/70" />
+        </div>
+      </div>
+
+      {/* 右侧长度调整 handle */}
+      <div
+        data-resize-handle
+        title="拖拽调整长度"
+        style={{
+          position: 'absolute',
+          right: -6,
+          top: '50%',
+          transform: 'translateY(-50%)',
+          zIndex: 10,
+          width: 12,
+          height: 28,
+          cursor: 'ew-resize',
+        }}
+        className="flex items-center justify-center rounded-sm border border-amber-200/50 bg-slate-600/80 hover:bg-amber-300/60"
+        onMouseDown={onResizeRightMouseDown}
+      >
+        <div className="flex gap-0.5">
+          <div className="h-3 w-px rounded-full bg-amber-200/70" />
+          <div className="h-3 w-px rounded-full bg-amber-200/70" />
+        </div>
+      </div>
+    </div>
+  )
+}
