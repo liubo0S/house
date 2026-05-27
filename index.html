@@ -12,7 +12,7 @@
           var path = params[0].replace(/^p=/, '').replace(/~and~/g, '&');
           var query = params[1] ? '?' + params[1].replace(/^q=/, '').replace(/~and~/g, '&') : '';
           window.history.replaceState(null, null,
-            l.pathname.slice(0, -1) + '/' + path + query + l.hash
+            l.pathname.slice(0, -1) + path + query + l.hash
           );
         }
       }(window.location));
