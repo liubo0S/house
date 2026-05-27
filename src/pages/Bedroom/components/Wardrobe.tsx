@@ -19,6 +19,50 @@ function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v))
 }
 
+/** 从左端点出发（右侧拖拽），计算在房间内能放下的最大柜子长度 */
+function maxLenFromLeft(lx: number, ly: number, rotation: number): number {
+  const rad = (rotation * Math.PI) / 180
+  const cos = Math.cos(rad), sin = Math.sin(rad)
+  const cosA = Math.abs(cos), sinA = Math.abs(sin)
+  const fits = (L: number) => {
+    const cx = lx + (L / 2) * cos
+    const cy = ly + (L / 2) * sin
+    const rw = L * cosA + THICKNESS * sinA
+    const rh = L * sinA + THICKNESS * cosA
+    return cx - rw / 2 >= WALL_BUFFER && cx + rw / 2 <= ROOM_W - WALL_BUFFER
+        && cy - rh / 2 >= WALL_BUFFER && cy + rh / 2 <= ROOM_H - WALL_BUFFER
+  }
+  if (!fits(MIN_LEN)) return MIN_LEN
+  let lo = MIN_LEN, hi = ROOM_W
+  for (let i = 0; i < 20; i++) {
+    const mid = (lo + hi) / 2
+    if (fits(mid)) lo = mid; else hi = mid
+  }
+  return lo
+}
+
+/** 从右端点出发（左侧拖拽），计算在房间内能放下的最大柜子长度 */
+function maxLenFromRight(rx: number, ry: number, rotation: number): number {
+  const rad = (rotation * Math.PI) / 180
+  const cos = Math.cos(rad), sin = Math.sin(rad)
+  const cosA = Math.abs(cos), sinA = Math.abs(sin)
+  const fits = (L: number) => {
+    const cx = rx - (L / 2) * cos
+    const cy = ry - (L / 2) * sin
+    const rw = L * cosA + THICKNESS * sinA
+    const rh = L * sinA + THICKNESS * cosA
+    return cx - rw / 2 >= WALL_BUFFER && cx + rw / 2 <= ROOM_W - WALL_BUFFER
+        && cy - rh / 2 >= WALL_BUFFER && cy + rh / 2 <= ROOM_H - WALL_BUFFER
+  }
+  if (!fits(MIN_LEN)) return MIN_LEN
+  let lo = MIN_LEN, hi = ROOM_W
+  for (let i = 0; i < 20; i++) {
+    const mid = (lo + hi) / 2
+    if (fits(mid)) lo = mid; else hi = mid
+  }
+  return lo
+}
+
 /** 根据旋转角计算旋转后包围盒并约束位置（宽=len, 高=THICKNESS） */
 function clampToRoom(x: number, y: number, len: number, rotation: number) {
   const rad = (rotation * Math.PI) / 180
@@ -127,9 +171,10 @@ export default function Wardrobe() {
     const cx0 = origX + origLen / 2, cy0 = origY + THICKNESS / 2
     const leftEndX = cx0 - (origLen / 2) * cos
     const leftEndY = cy0 - (origLen / 2) * sin
+    const maxLen = maxLenFromLeft(leftEndX, leftEndY, origRot)
     const onMove = (ev: MouseEvent) => {
       const delta = (ev.clientX - startX) * cos + (ev.clientY - startY) * sin
-      const newLen = clamp(origLen + delta, MIN_LEN, ROOM_W)
+      const newLen = clamp(origLen + delta, MIN_LEN, maxLen)
       const newCx = leftEndX + (newLen / 2) * cos
       const newCy = leftEndY + (newLen / 2) * sin
       setState(prev => ({ ...prev, x: newCx - newLen / 2, y: newCy - THICKNESS / 2, len: newLen }))
@@ -154,11 +199,12 @@ export default function Wardrobe() {
     const cx0 = origX + origLen / 2, cy0 = origY + THICKNESS / 2
     const leftEndX = cx0 - (origLen / 2) * cos
     const leftEndY = cy0 - (origLen / 2) * sin
+    const maxLen = maxLenFromLeft(leftEndX, leftEndY, origRot)
     const onMove = (ev: TouchEvent) => {
       ev.preventDefault()
       const t = ev.touches[0]
       const delta = (t.clientX - startX) * cos + (t.clientY - startY) * sin
-      const newLen = clamp(origLen + delta, MIN_LEN, ROOM_W)
+      const newLen = clamp(origLen + delta, MIN_LEN, maxLen)
       const newCx = leftEndX + (newLen / 2) * cos
       const newCy = leftEndY + (newLen / 2) * sin
       setState(prev => ({ ...prev, x: newCx - newLen / 2, y: newCy - THICKNESS / 2, len: newLen }))
@@ -184,9 +230,10 @@ export default function Wardrobe() {
     const cx0 = origX + origLen / 2, cy0 = origY + THICKNESS / 2
     const rightEndX = cx0 + (origLen / 2) * cos
     const rightEndY = cy0 + (origLen / 2) * sin
+    const maxLen = maxLenFromRight(rightEndX, rightEndY, origRot)
     const onMove = (ev: MouseEvent) => {
       const delta = -((ev.clientX - startX) * cos + (ev.clientY - startY) * sin)
-      const newLen = clamp(origLen + delta, MIN_LEN, ROOM_W)
+      const newLen = clamp(origLen + delta, MIN_LEN, maxLen)
       const newCx = rightEndX - (newLen / 2) * cos
       const newCy = rightEndY - (newLen / 2) * sin
       setState(prev => ({ ...prev, x: newCx - newLen / 2, y: newCy - THICKNESS / 2, len: newLen }))
@@ -211,11 +258,12 @@ export default function Wardrobe() {
     const cx0 = origX + origLen / 2, cy0 = origY + THICKNESS / 2
     const rightEndX = cx0 + (origLen / 2) * cos
     const rightEndY = cy0 + (origLen / 2) * sin
+    const maxLen = maxLenFromRight(rightEndX, rightEndY, origRot)
     const onMove = (ev: TouchEvent) => {
       ev.preventDefault()
       const t = ev.touches[0]
       const delta = -((t.clientX - startX) * cos + (t.clientY - startY) * sin)
-      const newLen = clamp(origLen + delta, MIN_LEN, ROOM_W)
+      const newLen = clamp(origLen + delta, MIN_LEN, maxLen)
       const newCx = rightEndX - (newLen / 2) * cos
       const newCy = rightEndY - (newLen / 2) * sin
       setState(prev => ({ ...prev, x: newCx - newLen / 2, y: newCy - THICKNESS / 2, len: newLen }))

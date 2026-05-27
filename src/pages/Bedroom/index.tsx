@@ -21,17 +21,7 @@ export default function BedroomPage() {
         </Link>
       </nav>
 
-      <section className="mx-auto grid max-w-6xl items-center gap-10 py-20 lg:grid-cols-[0.95fr_1.05fr] lg:py-28">
-        <div>
-          <p className="mb-5 inline-flex rounded-full border border-amber-200/40 bg-amber-200/10 px-4 py-2 text-sm font-medium text-amber-100">
-            Room Route · /bedroom
-          </p>
-          <h1 className="text-5xl font-black tracking-tight text-white sm:text-6xl">智能卧室空间</h1>
-          <p className="mt-7 max-w-xl text-lg leading-8 text-indigo-100/80">
-            这是 bedroom 路由下的新页面，用于展示卧室场景、空间状态与舒适度信息，可继续扩展为真实业务模块。
-          </p>
-        </div>
-
+      <section className="mx-auto flex max-w-6xl justify-center py-20 lg:py-28">
         <div className="rounded-[2rem] border border-white/10 bg-white/10 p-6 shadow-2xl shadow-slate-950/40 backdrop-blur-xl">
           <div className="rounded-[1.5rem] bg-slate-950/60 p-6">
             {/* 房间平面图：grid 布局，方向标注完全在房间外 */}
@@ -128,18 +118,6 @@ export default function BedroomPage() {
               </div>
             </div>
 
-            <div className="mt-6 grid gap-4 sm:grid-cols-3">
-              {[
-                ['23°C', '室内温度'],
-                ['42%', '空气湿度'],
-                ['柔和', '灯光模式'],
-              ].map(([value, label]) => (
-                <div key={label} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <div className="text-2xl font-bold text-amber-100">{value}</div>
-                  <div className="mt-1 text-sm text-slate-300">{label}</div>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
       </section>
