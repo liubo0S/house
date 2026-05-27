@@ -83,6 +83,31 @@ export default function Bed() {
     window.addEventListener('mouseup', onUp)
   }, [])
 
+  const onDragTouchStart = useCallback((e: React.TouchEvent) => {
+    if ((e.target as HTMLElement).closest('[data-rotate-handle]')) return
+    e.preventDefault()
+
+    const touch = e.touches[0]
+    const startX = touch.clientX
+    const startY = touch.clientY
+    const origX = stateRef.current.x
+    const origY = stateRef.current.y
+
+    const onMove = (ev: TouchEvent) => {
+      ev.preventDefault()
+      const t = ev.touches[0]
+      const { rotation } = stateRef.current
+      const clamped = clampToRoom(origX + t.clientX - startX, origY + t.clientY - startY, rotation)
+      setState(prev => ({ ...prev, ...clamped }))
+    }
+    const onUp = () => {
+      window.removeEventListener('touchmove', onMove)
+      window.removeEventListener('touchend', onUp)
+    }
+    window.addEventListener('touchmove', onMove, { passive: false })
+    window.addEventListener('touchend', onUp)
+  }, [])
+
   const onRotateClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
     setState(prev => {
@@ -107,6 +132,7 @@ export default function Bed() {
         userSelect: 'none',
       }}
       onMouseDown={onDragMouseDown}
+      onTouchStart={onDragTouchStart}
     >
       {/* 床主体 */}
       <div className="relative size-full overflow-hidden rounded-2xl border border-amber-200/25 bg-gradient-to-b from-amber-950/70 to-amber-900/40 shadow-lg shadow-black/30">

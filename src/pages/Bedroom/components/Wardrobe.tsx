@@ -81,6 +81,29 @@ export default function Wardrobe() {
     window.addEventListener('mouseup', onUp)
   }, [])
 
+  const onDragTouchStart = useCallback((e: React.TouchEvent) => {
+    if ((e.target as HTMLElement).closest('[data-rotate-handle],[data-resize-handle]')) return
+    e.preventDefault()
+    const touch = e.touches[0]
+    const startX = touch.clientX
+    const startY = touch.clientY
+    const origX = stateRef.current.x
+    const origY = stateRef.current.y
+    const onMove = (ev: TouchEvent) => {
+      ev.preventDefault()
+      const t = ev.touches[0]
+      const { len, rotation } = stateRef.current
+      const clamped = clampToRoom(origX + t.clientX - startX, origY + t.clientY - startY, len, rotation)
+      setState(prev => ({ ...prev, ...clamped }))
+    }
+    const onUp = () => {
+      window.removeEventListener('touchmove', onMove)
+      window.removeEventListener('touchend', onUp)
+    }
+    window.addEventListener('touchmove', onMove, { passive: false })
+    window.addEventListener('touchend', onUp)
+  }, [])
+
   // 旋转
   const onRotateClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
@@ -119,6 +142,35 @@ export default function Wardrobe() {
     window.addEventListener('mouseup', onUp)
   }, [])
 
+  const onResizeRightTouchStart = useCallback((e: React.TouchEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const touch = e.touches[0]
+    const startX = touch.clientX
+    const startY = touch.clientY
+    const { x: origX, y: origY, len: origLen, rotation: origRot } = stateRef.current
+    const rad = (origRot * Math.PI) / 180
+    const cos = Math.cos(rad), sin = Math.sin(rad)
+    const cx0 = origX + origLen / 2, cy0 = origY + THICKNESS / 2
+    const leftEndX = cx0 - (origLen / 2) * cos
+    const leftEndY = cy0 - (origLen / 2) * sin
+    const onMove = (ev: TouchEvent) => {
+      ev.preventDefault()
+      const t = ev.touches[0]
+      const delta = (t.clientX - startX) * cos + (t.clientY - startY) * sin
+      const newLen = clamp(origLen + delta, MIN_LEN, ROOM_W)
+      const newCx = leftEndX + (newLen / 2) * cos
+      const newCy = leftEndY + (newLen / 2) * sin
+      setState(prev => ({ ...prev, x: newCx - newLen / 2, y: newCy - THICKNESS / 2, len: newLen }))
+    }
+    const onUp = () => {
+      window.removeEventListener('touchmove', onMove)
+      window.removeEventListener('touchend', onUp)
+    }
+    window.addEventListener('touchmove', onMove, { passive: false })
+    window.addEventListener('touchend', onUp)
+  }, [])
+
   // 左侧 handle：固定右端，改 len 并反推 x/y
   const onResizeLeftMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
@@ -147,6 +199,35 @@ export default function Wardrobe() {
     window.addEventListener('mouseup', onUp)
   }, [])
 
+  const onResizeLeftTouchStart = useCallback((e: React.TouchEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const touch = e.touches[0]
+    const startX = touch.clientX
+    const startY = touch.clientY
+    const { x: origX, y: origY, len: origLen, rotation: origRot } = stateRef.current
+    const rad = (origRot * Math.PI) / 180
+    const cos = Math.cos(rad), sin = Math.sin(rad)
+    const cx0 = origX + origLen / 2, cy0 = origY + THICKNESS / 2
+    const rightEndX = cx0 + (origLen / 2) * cos
+    const rightEndY = cy0 + (origLen / 2) * sin
+    const onMove = (ev: TouchEvent) => {
+      ev.preventDefault()
+      const t = ev.touches[0]
+      const delta = -((t.clientX - startX) * cos + (t.clientY - startY) * sin)
+      const newLen = clamp(origLen + delta, MIN_LEN, ROOM_W)
+      const newCx = rightEndX - (newLen / 2) * cos
+      const newCy = rightEndY - (newLen / 2) * sin
+      setState(prev => ({ ...prev, x: newCx - newLen / 2, y: newCy - THICKNESS / 2, len: newLen }))
+    }
+    const onUp = () => {
+      window.removeEventListener('touchmove', onMove)
+      window.removeEventListener('touchend', onUp)
+    }
+    window.addEventListener('touchmove', onMove, { passive: false })
+    window.addEventListener('touchend', onUp)
+  }, [])
+
   const { x, y, len, rotation } = state
 
   // 柜门数量（每扇约65px宽）
@@ -166,6 +247,7 @@ export default function Wardrobe() {
         userSelect: 'none',
       }}
       onMouseDown={onDragMouseDown}
+      onTouchStart={onDragTouchStart}
     >
       {/* 柜体 */}
       <div className="relative size-full overflow-hidden rounded-lg border border-amber-200/30 bg-gradient-to-b from-slate-700/80 to-slate-800/70 shadow-lg shadow-black/40">
@@ -214,6 +296,7 @@ export default function Wardrobe() {
         }}
         className="flex items-center justify-center rounded-sm border border-amber-200/50 bg-slate-600/80 hover:bg-amber-300/60"
         onMouseDown={onResizeLeftMouseDown}
+        onTouchStart={onResizeLeftTouchStart}
       >
         <div className="flex gap-0.5">
           <div className="h-3 w-px rounded-full bg-amber-200/70" />
@@ -237,6 +320,7 @@ export default function Wardrobe() {
         }}
         className="flex items-center justify-center rounded-sm border border-amber-200/50 bg-slate-600/80 hover:bg-amber-300/60"
         onMouseDown={onResizeRightMouseDown}
+        onTouchStart={onResizeRightTouchStart}
       >
         <div className="flex gap-0.5">
           <div className="h-3 w-px rounded-full bg-amber-200/70" />
