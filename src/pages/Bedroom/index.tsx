@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import BathroomDoor, { DOOR_W, loadX } from './components/BathroomDoor'
 import Bed from './components/Bed'
@@ -6,6 +6,26 @@ import Wardrobe from './components/Wardrobe'
 
 export default function BedroomPage() {
   const [doorX, setDoorX] = useState(loadX)
+  const cardRef = useRef<HTMLDivElement>(null)
+  const [layout, setLayout] = useState({ scale: 1, wrapperH: 0 })
+
+  useEffect(() => {
+    const update = () => {
+      const card = cardRef.current
+      if (!card) return
+      const naturalW = card.scrollWidth
+      const naturalH = card.scrollHeight
+      // main has px-6 (24px×2=48px) on mobile
+      const availW = window.innerWidth - 48
+      // reserve space for nav (~50px) + main py-8 (64px) + section py-4 (32px)
+      const availH = window.innerHeight - 146
+      const s = Math.min(1, availW / naturalW, availH / naturalH)
+      setLayout({ scale: s, wrapperH: s < 1 ? naturalH * s : 0 })
+    }
+    update()
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [])
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_right,rgba(251,191,36,0.2),transparent_28%),linear-gradient(135deg,#111827_0%,#312e81_52%,#0f172a_100%)] px-6 py-8 text-slate-100 sm:px-10 lg:px-16">
       <nav className="mx-auto flex max-w-6xl items-center justify-between rounded-full border border-white/10 bg-white/10 px-5 py-3 backdrop-blur">
@@ -21,8 +41,17 @@ export default function BedroomPage() {
         </Link>
       </nav>
 
-      <section className="mx-auto flex max-w-6xl justify-center py-20 lg:py-28">
-        <div className="rounded-[2rem] border border-white/10 bg-white/10 p-6 shadow-2xl shadow-slate-950/40 backdrop-blur-xl">
+      <section className="mx-auto flex max-w-6xl justify-center py-4 lg:py-28">
+        {/* 缩放占位层：scale 不影响布局，需手动撑开高度 */}
+        <div style={layout.wrapperH ? { height: layout.wrapperH } : {}}>
+          <div
+            ref={cardRef}
+            style={{
+              transformOrigin: 'top center',
+              transform: layout.scale < 1 ? `scale(${layout.scale})` : undefined,
+            }}
+            className="rounded-[2rem] border border-white/10 bg-white/10 p-6 shadow-2xl shadow-slate-950/40 backdrop-blur-xl"
+          >
           <div className="rounded-[1.5rem] bg-slate-950/60 p-6">
             {/* 房间平面图：grid 布局，方向标注完全在房间外 */}
             <div
@@ -118,6 +147,7 @@ export default function BedroomPage() {
               </div>
             </div>
 
+          </div>
           </div>
         </div>
       </section>
