@@ -184,9 +184,9 @@ export default function BedroomPage() {
 
                   {/* 房间平面图容器（overflow-hidden 裁剪床） */}
                   <div className="isolate size-full overflow-hidden rounded-2xl border-2 border-dashed border-amber-300/40 bg-indigo-950/60">
-                    <Bed />
-                    <Wardrobe />
-                    <BathroomDoor x={doorX} onXChange={setDoorX} />
+                    <Bed roomRotation={roomRotation} effectiveScale={effectiveScale} />
+                    <Wardrobe roomRotation={roomRotation} effectiveScale={effectiveScale} />
+                    <BathroomDoor x={doorX} onXChange={setDoorX} roomRotation={roomRotation} effectiveScale={effectiveScale} />
 
                     {/* 东墙门口（下方，左侧，宽85）铰链在左端（靠南墙），门扇向室内逆时针展开，开后靠南墙 */}
                     {/* 门洞覆盖层：遮住该段虚线边框 */}

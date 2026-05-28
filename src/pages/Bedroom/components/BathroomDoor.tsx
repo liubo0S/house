@@ -17,9 +17,9 @@ export function loadX(): number {
   return 350
 }
 
-interface Props { x: number; onXChange: (x: number) => void }
+interface Props { x: number; onXChange: (x: number) => void; roomRotation: number; effectiveScale: number }
 
-export default function BathroomDoor({ x, onXChange }: Props) {
+export default function BathroomDoor({ x, onXChange, roomRotation, effectiveScale }: Props) {
   const xRef = useRef(x)
   xRef.current = x
 
@@ -30,9 +30,17 @@ export default function BathroomDoor({ x, onXChange }: Props) {
   const onMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     const startClientX = e.clientX
+    const startClientY = e.clientY
     const startX = xRef.current
+    const snapRoomRotation = roomRotation
+    const snapScale = effectiveScale
     const onMove = (ev: MouseEvent) => {
-      onXChange(Math.max(X_MIN, Math.min(X_MAX, startX + ev.clientX - startClientX)))
+      const angle = -(snapRoomRotation * Math.PI) / 180
+      const sdx = (ev.clientX - startClientX) / snapScale
+      const sdy = (ev.clientY - startClientY) / snapScale
+      // 厕所门只在房间 X 轴（水平）方向滑动，取本地 dx
+      const ldx = sdx * Math.cos(angle) - sdy * Math.sin(angle)
+      onXChange(Math.max(X_MIN, Math.min(X_MAX, startX + ldx)))
     }
     const onUp = () => {
       window.removeEventListener('mousemove', onMove)
@@ -40,7 +48,7 @@ export default function BathroomDoor({ x, onXChange }: Props) {
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
-  }, [onXChange])
+  }, [onXChange, roomRotation, effectiveScale])
 
   return (
     <>

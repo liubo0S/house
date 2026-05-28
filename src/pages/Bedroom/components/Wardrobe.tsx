@@ -15,6 +15,21 @@ interface WardrobeState {
   rotation: number
 }
 
+interface Props {
+  roomRotation: number
+  effectiveScale: number
+}
+
+/** 将屏幕坐标增量转换为房间本地坐标增量 */
+function screenToRoom(dx: number, dy: number, roomRotation: number, scale: number) {
+  const angle = -(roomRotation * Math.PI) / 180
+  const sx = dx / scale, sy = dy / scale
+  return {
+    dx: sx * Math.cos(angle) - sy * Math.sin(angle),
+    dy: sx * Math.sin(angle) + sy * Math.cos(angle),
+  }
+}
+
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v))
 }
@@ -95,7 +110,7 @@ function loadState(): WardrobeState {
   return { x, y, len, rotation: 0 }
 }
 
-export default function Wardrobe() {
+export default function Wardrobe({ roomRotation, effectiveScale }: Props) {
   const [state, setState] = useState<WardrobeState>(loadState)
   const stateRef = useRef(state)
   stateRef.current = state
@@ -112,9 +127,12 @@ export default function Wardrobe() {
     const startY = e.clientY
     const origX = stateRef.current.x
     const origY = stateRef.current.y
+    const snapRoomRotation = roomRotation
+    const snapScale = effectiveScale
     const onMove = (ev: MouseEvent) => {
       const { len, rotation } = stateRef.current
-      const clamped = clampToRoom(origX + ev.clientX - startX, origY + ev.clientY - startY, len, rotation)
+      const local = screenToRoom(ev.clientX - startX, ev.clientY - startY, snapRoomRotation, snapScale)
+      const clamped = clampToRoom(origX + local.dx, origY + local.dy, len, rotation)
       setState(prev => ({ ...prev, ...clamped }))
     }
     const onUp = () => {
@@ -123,7 +141,7 @@ export default function Wardrobe() {
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
-  }, [])
+  }, [roomRotation, effectiveScale])
 
   const onDragTouchStart = useCallback((e: React.TouchEvent) => {
     if ((e.target as HTMLElement).closest('[data-rotate-handle],[data-resize-handle]')) return
@@ -133,11 +151,14 @@ export default function Wardrobe() {
     const startY = touch.clientY
     const origX = stateRef.current.x
     const origY = stateRef.current.y
+    const snapRoomRotation = roomRotation
+    const snapScale = effectiveScale
     const onMove = (ev: TouchEvent) => {
       ev.preventDefault()
       const t = ev.touches[0]
       const { len, rotation } = stateRef.current
-      const clamped = clampToRoom(origX + t.clientX - startX, origY + t.clientY - startY, len, rotation)
+      const local = screenToRoom(t.clientX - startX, t.clientY - startY, snapRoomRotation, snapScale)
+      const clamped = clampToRoom(origX + local.dx, origY + local.dy, len, rotation)
       setState(prev => ({ ...prev, ...clamped }))
     }
     const onUp = () => {
@@ -146,7 +167,7 @@ export default function Wardrobe() {
     }
     window.addEventListener('touchmove', onMove, { passive: false })
     window.addEventListener('touchend', onUp)
-  }, [])
+  }, [roomRotation, effectiveScale])
 
   // 旋转
   const onRotateClick = useCallback((e: React.MouseEvent) => {
@@ -165,6 +186,8 @@ export default function Wardrobe() {
     const startX = e.clientX
     const startY = e.clientY
     const { x: origX, y: origY, len: origLen, rotation: origRot } = stateRef.current
+    const snapRoomRotation = roomRotation
+    const snapScale = effectiveScale
     const rad = (origRot * Math.PI) / 180
     const cos = Math.cos(rad), sin = Math.sin(rad)
     // 固定左端绝对坐标
@@ -173,7 +196,8 @@ export default function Wardrobe() {
     const leftEndY = cy0 - (origLen / 2) * sin
     const maxLen = maxLenFromLeft(leftEndX, leftEndY, origRot)
     const onMove = (ev: MouseEvent) => {
-      const delta = (ev.clientX - startX) * cos + (ev.clientY - startY) * sin
+      const local = screenToRoom(ev.clientX - startX, ev.clientY - startY, snapRoomRotation, snapScale)
+      const delta = local.dx * cos + local.dy * sin
       const newLen = clamp(origLen + delta, MIN_LEN, maxLen)
       const newCx = leftEndX + (newLen / 2) * cos
       const newCy = leftEndY + (newLen / 2) * sin
@@ -185,7 +209,7 @@ export default function Wardrobe() {
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
-  }, [])
+  }, [roomRotation, effectiveScale])
 
   const onResizeRightTouchStart = useCallback((e: React.TouchEvent) => {
     e.preventDefault()
@@ -194,6 +218,8 @@ export default function Wardrobe() {
     const startX = touch.clientX
     const startY = touch.clientY
     const { x: origX, y: origY, len: origLen, rotation: origRot } = stateRef.current
+    const snapRoomRotation = roomRotation
+    const snapScale = effectiveScale
     const rad = (origRot * Math.PI) / 180
     const cos = Math.cos(rad), sin = Math.sin(rad)
     const cx0 = origX + origLen / 2, cy0 = origY + THICKNESS / 2
@@ -203,7 +229,8 @@ export default function Wardrobe() {
     const onMove = (ev: TouchEvent) => {
       ev.preventDefault()
       const t = ev.touches[0]
-      const delta = (t.clientX - startX) * cos + (t.clientY - startY) * sin
+      const local = screenToRoom(t.clientX - startX, t.clientY - startY, snapRoomRotation, snapScale)
+      const delta = local.dx * cos + local.dy * sin
       const newLen = clamp(origLen + delta, MIN_LEN, maxLen)
       const newCx = leftEndX + (newLen / 2) * cos
       const newCy = leftEndY + (newLen / 2) * sin
@@ -215,7 +242,7 @@ export default function Wardrobe() {
     }
     window.addEventListener('touchmove', onMove, { passive: false })
     window.addEventListener('touchend', onUp)
-  }, [])
+  }, [roomRotation, effectiveScale])
 
   // 左侧 handle：固定右端，改 len 并反推 x/y
   const onResizeLeftMouseDown = useCallback((e: React.MouseEvent) => {
@@ -224,6 +251,8 @@ export default function Wardrobe() {
     const startX = e.clientX
     const startY = e.clientY
     const { x: origX, y: origY, len: origLen, rotation: origRot } = stateRef.current
+    const snapRoomRotation = roomRotation
+    const snapScale = effectiveScale
     const rad = (origRot * Math.PI) / 180
     const cos = Math.cos(rad), sin = Math.sin(rad)
     // 固定右端绝对坐标
@@ -232,7 +261,8 @@ export default function Wardrobe() {
     const rightEndY = cy0 + (origLen / 2) * sin
     const maxLen = maxLenFromRight(rightEndX, rightEndY, origRot)
     const onMove = (ev: MouseEvent) => {
-      const delta = -((ev.clientX - startX) * cos + (ev.clientY - startY) * sin)
+      const local = screenToRoom(ev.clientX - startX, ev.clientY - startY, snapRoomRotation, snapScale)
+      const delta = -(local.dx * cos + local.dy * sin)
       const newLen = clamp(origLen + delta, MIN_LEN, maxLen)
       const newCx = rightEndX - (newLen / 2) * cos
       const newCy = rightEndY - (newLen / 2) * sin
@@ -244,7 +274,7 @@ export default function Wardrobe() {
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
-  }, [])
+  }, [roomRotation, effectiveScale])
 
   const onResizeLeftTouchStart = useCallback((e: React.TouchEvent) => {
     e.preventDefault()
@@ -253,6 +283,8 @@ export default function Wardrobe() {
     const startX = touch.clientX
     const startY = touch.clientY
     const { x: origX, y: origY, len: origLen, rotation: origRot } = stateRef.current
+    const snapRoomRotation = roomRotation
+    const snapScale = effectiveScale
     const rad = (origRot * Math.PI) / 180
     const cos = Math.cos(rad), sin = Math.sin(rad)
     const cx0 = origX + origLen / 2, cy0 = origY + THICKNESS / 2
@@ -262,7 +294,8 @@ export default function Wardrobe() {
     const onMove = (ev: TouchEvent) => {
       ev.preventDefault()
       const t = ev.touches[0]
-      const delta = -((t.clientX - startX) * cos + (t.clientY - startY) * sin)
+      const local = screenToRoom(t.clientX - startX, t.clientY - startY, snapRoomRotation, snapScale)
+      const delta = -(local.dx * cos + local.dy * sin)
       const newLen = clamp(origLen + delta, MIN_LEN, maxLen)
       const newCx = rightEndX - (newLen / 2) * cos
       const newCy = rightEndY - (newLen / 2) * sin
@@ -274,7 +307,7 @@ export default function Wardrobe() {
     }
     window.addEventListener('touchmove', onMove, { passive: false })
     window.addEventListener('touchend', onUp)
-  }, [])
+  }, [roomRotation, effectiveScale])
 
   const { x, y, len, rotation } = state
 

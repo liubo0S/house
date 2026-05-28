@@ -13,6 +13,21 @@ interface BedState {
   rotation: number
 }
 
+interface Props {
+  roomRotation: number
+  effectiveScale: number
+}
+
+/** 将屏幕坐标增量转换为房间本地坐标增量 */
+function screenToRoom(dx: number, dy: number, roomRotation: number, scale: number) {
+  const angle = -(roomRotation * Math.PI) / 180
+  const sx = dx / scale, sy = dy / scale
+  return {
+    dx: sx * Math.cos(angle) - sy * Math.sin(angle),
+    dy: sx * Math.sin(angle) + sy * Math.cos(angle),
+  }
+}
+
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v))
 }
@@ -50,7 +65,7 @@ function loadState(): BedState {
   return { x: 20, y: 80, rotation: 0 }
 }
 
-export default function Bed() {
+export default function Bed({ roomRotation, effectiveScale }: Props) {
   const [state, setState] = useState<BedState>(loadState)
   const stateRef = useRef(state)
   stateRef.current = state
@@ -69,10 +84,13 @@ export default function Bed() {
     const startY = e.clientY
     const origX = stateRef.current.x
     const origY = stateRef.current.y
+    const snapRoomRotation = roomRotation
+    const snapScale = effectiveScale
 
     const onMove = (ev: MouseEvent) => {
       const { rotation } = stateRef.current
-      const clamped = clampToRoom(origX + ev.clientX - startX, origY + ev.clientY - startY, rotation)
+      const local = screenToRoom(ev.clientX - startX, ev.clientY - startY, snapRoomRotation, snapScale)
+      const clamped = clampToRoom(origX + local.dx, origY + local.dy, rotation)
       setState(prev => ({ ...prev, ...clamped }))
     }
     const onUp = () => {
@@ -81,7 +99,7 @@ export default function Bed() {
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
-  }, [])
+  }, [roomRotation, effectiveScale])
 
   const onDragTouchStart = useCallback((e: React.TouchEvent) => {
     if ((e.target as HTMLElement).closest('[data-rotate-handle]')) return
@@ -92,12 +110,15 @@ export default function Bed() {
     const startY = touch.clientY
     const origX = stateRef.current.x
     const origY = stateRef.current.y
+    const snapRoomRotation = roomRotation
+    const snapScale = effectiveScale
 
     const onMove = (ev: TouchEvent) => {
       ev.preventDefault()
       const t = ev.touches[0]
       const { rotation } = stateRef.current
-      const clamped = clampToRoom(origX + t.clientX - startX, origY + t.clientY - startY, rotation)
+      const local = screenToRoom(t.clientX - startX, t.clientY - startY, snapRoomRotation, snapScale)
+      const clamped = clampToRoom(origX + local.dx, origY + local.dy, rotation)
       setState(prev => ({ ...prev, ...clamped }))
     }
     const onUp = () => {
@@ -106,7 +127,7 @@ export default function Bed() {
     }
     window.addEventListener('touchmove', onMove, { passive: false })
     window.addEventListener('touchend', onUp)
-  }, [])
+  }, [roomRotation, effectiveScale])
 
   const onRotateClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
