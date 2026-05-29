@@ -1,8 +1,40 @@
-import { useState, useEffect, useRef } from 'react'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import BathroomDoor, { DOOR_W, loadX } from './components/BathroomDoor'
 import Bed from './components/Bed'
-import Wardrobe from './components/Wardrobe'
+import Wardrobe, { type WardrobeItem } from './components/Wardrobe'
+
+const MANUAL_WARDROBES_KEY = 'bedroom_manual_wardrobes_state'
+const ROOM_W = 460
+const ROOM_H = 370
+const WARDROBE_THICKNESS = 60
+const MANUAL_DEFAULT_LEN = 100
+
+function loadManualWardrobes(): WardrobeItem[] {
+  try {
+    const saved = localStorage.getItem(MANUAL_WARDROBES_KEY)
+    if (!saved) return []
+    const parsed = JSON.parse(saved)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(item => typeof item?.id === 'string' && typeof item?.name === 'string')
+  } catch {
+    return []
+  }
+}
+
+function createManualWardrobe(name: string, count: number): WardrobeItem {
+  const offset = (count % 6) * 14
+  const x = Math.min(ROOM_W - MANUAL_DEFAULT_LEN - 16, 24 + offset)
+  const y = Math.min(ROOM_H - WARDROBE_THICKNESS - 16, 24 + offset)
+  return {
+    id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    name,
+    x,
+    y,
+    len: MANUAL_DEFAULT_LEN,
+    rotation: 0,
+  }
+}
 
 export default function BedroomPage() {
   const [doorX, setDoorX] = useState(loadX)
@@ -11,11 +43,17 @@ export default function BedroomPage() {
   const [autoScale, setAutoScale] = useState(1)
   const [userZoom, setUserZoom] = useState(1)
   const [roomRotation, setRoomRotation] = useState(0)
+  const [manualWardrobes, setManualWardrobes] = useState<WardrobeItem[]>(loadManualWardrobes)
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [newElementName, setNewElementName] = useState('')
+  const [deleteMode, setDeleteMode] = useState(false)
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
   const effectiveScale = autoScale * userZoom
   const isRotated90 = roomRotation % 180 !== 0
   const visualW = naturalSize.w ? (isRotated90 ? naturalSize.h : naturalSize.w) * effectiveScale : undefined
   const visualH = naturalSize.w ? (isRotated90 ? naturalSize.w : naturalSize.h) * effectiveScale : undefined
+  const pendingDeleteName = manualWardrobes.find(item => item.id === pendingDeleteId)?.name
 
   useEffect(() => {
     const update = () => {
@@ -33,6 +71,35 @@ export default function BedroomPage() {
     window.addEventListener('resize', update)
     return () => window.removeEventListener('resize', update)
   }, [])
+
+  useEffect(() => {
+    localStorage.setItem(MANUAL_WARDROBES_KEY, JSON.stringify(manualWardrobes))
+  }, [manualWardrobes])
+
+  const openAddDialog = () => {
+    setNewElementName('')
+    setIsAddDialogOpen(true)
+  }
+
+  const addManualWardrobe = (e: FormEvent) => {
+    e.preventDefault()
+    const name = newElementName.trim()
+    if (!name) return
+    setManualWardrobes(prev => [...prev, createManualWardrobe(name, prev.length)])
+    setIsAddDialogOpen(false)
+    setNewElementName('')
+  }
+
+  const updateManualWardrobe = (id: string | undefined, next: WardrobeItem) => {
+    if (!id) return
+    setManualWardrobes(prev => prev.map(item => (item.id === id ? { ...next, id, name: item.name } : item)))
+  }
+
+  const confirmDeleteManualWardrobe = () => {
+    if (!pendingDeleteId) return
+    setManualWardrobes(prev => prev.filter(item => item.id !== pendingDeleteId))
+    setPendingDeleteId(null)
+  }
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_right,rgba(251,191,36,0.2),transparent_28%),linear-gradient(135deg,#111827_0%,#312e81_52%,#0f172a_100%)] px-6 py-8 text-slate-100 sm:px-10 lg:px-16">
@@ -186,6 +253,18 @@ export default function BedroomPage() {
                   <div className="isolate size-full overflow-hidden rounded-2xl border-2 border-dashed border-amber-300/40 bg-indigo-950/60">
                     <Bed roomRotation={roomRotation} effectiveScale={effectiveScale} />
                     <Wardrobe roomRotation={roomRotation} effectiveScale={effectiveScale} />
+                    {manualWardrobes.map(item => (
+                      <Wardrobe
+                        key={item.id}
+                        value={item}
+                        isManual
+                        deleteMode={deleteMode}
+                        roomRotation={roomRotation}
+                        effectiveScale={effectiveScale}
+                        onChange={next => updateManualWardrobe(item.id, next)}
+                        onDeleteClick={() => setPendingDeleteId(item.id ?? null)}
+                      />
+                    ))}
                     <BathroomDoor x={doorX} onXChange={setDoorX} roomRotation={roomRotation} effectiveScale={effectiveScale} />
 
                     {/* 东墙门口（下方，左侧，宽85）铰链在左端（靠南墙），门扇向室内逆时针展开，开后靠南墙 */}
@@ -229,7 +308,82 @@ export default function BedroomPage() {
             </div>
           </div>
         </div>
+
+        <div className="mt-6 flex items-center gap-3 rounded-full border border-white/10 bg-white/10 p-1.5 shadow-lg shadow-black/20 backdrop-blur">
+          <button
+            type="button"
+            onClick={openAddDialog}
+            className="rounded-full bg-amber-300 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-200 active:scale-95"
+          >
+            新增元素
+          </button>
+          <button
+            type="button"
+            onClick={() => setDeleteMode(mode => !mode)}
+            disabled={manualWardrobes.length === 0}
+            className="rounded-full border border-white/15 px-5 py-2 text-sm font-semibold text-slate-100 transition hover:border-red-300/70 hover:bg-red-400/20 active:scale-95 disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            删除元素
+          </button>
+        </div>
       </section>
+
+      {isAddDialogOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/65 px-6 backdrop-blur-sm">
+          <form onSubmit={addManualWardrobe} className="w-full max-w-sm rounded-3xl border border-white/15 bg-slate-900/95 p-6 shadow-2xl shadow-black/50">
+            <h2 className="text-lg font-semibold text-amber-100">新增元素</h2>
+            <p className="mt-2 text-sm text-slate-300">请输入元素名称，确认后会添加到房间中。</p>
+            <input
+              autoFocus
+              value={newElementName}
+              onChange={e => setNewElementName(e.target.value)}
+              placeholder="请输入名称"
+              className="mt-5 w-full rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-amber-200/70"
+            />
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsAddDialogOpen(false)}
+                className="rounded-full border border-white/15 px-4 py-2 text-sm text-slate-200 transition hover:bg-white/10"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                disabled={!newElementName.trim()}
+                className="rounded-full bg-amber-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                确认
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {pendingDeleteId && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/65 px-6 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl border border-white/15 bg-slate-900/95 p-6 shadow-2xl shadow-black/50">
+            <h2 className="text-lg font-semibold text-red-100">确认删除</h2>
+            <p className="mt-2 text-sm text-slate-300">确认删除「{pendingDeleteName}」吗？该操作不可恢复。</p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingDeleteId(null)}
+                className="rounded-full border border-white/15 px-4 py-2 text-sm text-slate-200 transition hover:bg-white/10"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteManualWardrobe}
+                className="rounded-full bg-red-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-400"
+              >
+                确认
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }

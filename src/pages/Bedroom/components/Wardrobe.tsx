@@ -3,12 +3,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 const STORAGE_KEY = 'bedroom_wardrobe_state'
 const THICKNESS = 60
 const DEFAULT_LEN = 260
-const MIN_LEN = 100
+const MIN_LEN = 60
 const ROOM_W = 460
 const ROOM_H = 370
 const WALL_BUFFER = 2
 
-interface WardrobeState {
+export interface WardrobeItem {
+  id?: string
+  name?: string
   x: number
   y: number
   len: number
@@ -18,6 +20,11 @@ interface WardrobeState {
 interface Props {
   roomRotation: number
   effectiveScale: number
+  value?: WardrobeItem
+  onChange?: (value: WardrobeItem) => void
+  isManual?: boolean
+  deleteMode?: boolean
+  onDeleteClick?: () => void
 }
 
 /** 将屏幕坐标增量转换为房间本地坐标增量 */
@@ -95,14 +102,17 @@ function clampToRoom(x: number, y: number, len: number, rotation: number) {
   }
 }
 
-function loadState(): WardrobeState {
+function normalizeState(state: WardrobeItem): WardrobeItem {
+  const len = Math.max(MIN_LEN, state.len || MIN_LEN)
+  const rotation = state.rotation || 0
+  const clamped = clampToRoom(state.x, state.y, len, rotation)
+  return { ...state, ...clamped, len, rotation }
+}
+
+function loadState(): WardrobeItem {
   try {
     const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved) {
-      const parsed: WardrobeState = JSON.parse(saved)
-      const clamped = clampToRoom(parsed.x, parsed.y, parsed.len, parsed.rotation)
-      return { ...parsed, ...clamped }
-    }
+    if (saved) return normalizeState(JSON.parse(saved))
   } catch {}
   const len = DEFAULT_LEN
   const x = (ROOM_W - len) / 2
@@ -110,18 +120,25 @@ function loadState(): WardrobeState {
   return { x, y, len, rotation: 0 }
 }
 
-export default function Wardrobe({ roomRotation, effectiveScale }: Props) {
-  const [state, setState] = useState<WardrobeState>(loadState)
+export default function Wardrobe({ roomRotation, effectiveScale, value, onChange, isManual = false, deleteMode = false, onDeleteClick }: Props) {
+  const [internalState, setInternalState] = useState<WardrobeItem>(loadState)
+  const state = value ? normalizeState(value) : internalState
   const stateRef = useRef(state)
   stateRef.current = state
 
+  const updateState = useCallback((updater: (prev: WardrobeItem) => WardrobeItem) => {
+    const next = normalizeState(updater(stateRef.current))
+    if (value && onChange) onChange(next)
+    else setInternalState(next)
+  }, [onChange, value])
+
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-  }, [state])
+    if (!value) localStorage.setItem(STORAGE_KEY, JSON.stringify(internalState))
+  }, [internalState, value])
 
   // 拖拽移动
   const onDragMouseDown = useCallback((e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('[data-rotate-handle],[data-resize-handle]')) return
+    if ((e.target as HTMLElement).closest('[data-rotate-handle],[data-resize-handle],[data-delete-handle]')) return
     e.preventDefault()
     const startX = e.clientX
     const startY = e.clientY
@@ -133,7 +150,7 @@ export default function Wardrobe({ roomRotation, effectiveScale }: Props) {
       const { len, rotation } = stateRef.current
       const local = screenToRoom(ev.clientX - startX, ev.clientY - startY, snapRoomRotation, snapScale)
       const clamped = clampToRoom(origX + local.dx, origY + local.dy, len, rotation)
-      setState(prev => ({ ...prev, ...clamped }))
+      updateState(prev => ({ ...prev, ...clamped }))
     }
     const onUp = () => {
       window.removeEventListener('mousemove', onMove)
@@ -141,10 +158,10 @@ export default function Wardrobe({ roomRotation, effectiveScale }: Props) {
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
-  }, [roomRotation, effectiveScale])
+  }, [roomRotation, effectiveScale, updateState])
 
   const onDragTouchStart = useCallback((e: React.TouchEvent) => {
-    if ((e.target as HTMLElement).closest('[data-rotate-handle],[data-resize-handle]')) return
+    if ((e.target as HTMLElement).closest('[data-rotate-handle],[data-resize-handle],[data-delete-handle]')) return
     e.preventDefault()
     const touch = e.touches[0]
     const startX = touch.clientX
@@ -159,7 +176,7 @@ export default function Wardrobe({ roomRotation, effectiveScale }: Props) {
       const { len, rotation } = stateRef.current
       const local = screenToRoom(t.clientX - startX, t.clientY - startY, snapRoomRotation, snapScale)
       const clamped = clampToRoom(origX + local.dx, origY + local.dy, len, rotation)
-      setState(prev => ({ ...prev, ...clamped }))
+      updateState(prev => ({ ...prev, ...clamped }))
     }
     const onUp = () => {
       window.removeEventListener('touchmove', onMove)
@@ -167,17 +184,13 @@ export default function Wardrobe({ roomRotation, effectiveScale }: Props) {
     }
     window.addEventListener('touchmove', onMove, { passive: false })
     window.addEventListener('touchend', onUp)
-  }, [roomRotation, effectiveScale])
+  }, [roomRotation, effectiveScale, updateState])
 
   // 旋转
   const onRotateClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
-    setState(prev => {
-      const newRotation = prev.rotation + 90
-      const clamped = clampToRoom(prev.x, prev.y, prev.len, newRotation)
-      return { ...clamped, len: prev.len, rotation: newRotation }
-    })
-  }, [])
+    updateState(prev => ({ ...prev, rotation: prev.rotation + 90 }))
+  }, [updateState])
 
   // 右侧 handle：固定左端，改 len 并反推 x/y
   const onResizeRightMouseDown = useCallback((e: React.MouseEvent) => {
@@ -201,7 +214,7 @@ export default function Wardrobe({ roomRotation, effectiveScale }: Props) {
       const newLen = clamp(origLen + delta, MIN_LEN, maxLen)
       const newCx = leftEndX + (newLen / 2) * cos
       const newCy = leftEndY + (newLen / 2) * sin
-      setState(prev => ({ ...prev, x: newCx - newLen / 2, y: newCy - THICKNESS / 2, len: newLen }))
+      updateState(prev => ({ ...prev, x: newCx - newLen / 2, y: newCy - THICKNESS / 2, len: newLen }))
     }
     const onUp = () => {
       window.removeEventListener('mousemove', onMove)
@@ -209,7 +222,7 @@ export default function Wardrobe({ roomRotation, effectiveScale }: Props) {
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
-  }, [roomRotation, effectiveScale])
+  }, [roomRotation, effectiveScale, updateState])
 
   const onResizeRightTouchStart = useCallback((e: React.TouchEvent) => {
     e.preventDefault()
@@ -234,7 +247,7 @@ export default function Wardrobe({ roomRotation, effectiveScale }: Props) {
       const newLen = clamp(origLen + delta, MIN_LEN, maxLen)
       const newCx = leftEndX + (newLen / 2) * cos
       const newCy = leftEndY + (newLen / 2) * sin
-      setState(prev => ({ ...prev, x: newCx - newLen / 2, y: newCy - THICKNESS / 2, len: newLen }))
+      updateState(prev => ({ ...prev, x: newCx - newLen / 2, y: newCy - THICKNESS / 2, len: newLen }))
     }
     const onUp = () => {
       window.removeEventListener('touchmove', onMove)
@@ -242,7 +255,7 @@ export default function Wardrobe({ roomRotation, effectiveScale }: Props) {
     }
     window.addEventListener('touchmove', onMove, { passive: false })
     window.addEventListener('touchend', onUp)
-  }, [roomRotation, effectiveScale])
+  }, [roomRotation, effectiveScale, updateState])
 
   // 左侧 handle：固定右端，改 len 并反推 x/y
   const onResizeLeftMouseDown = useCallback((e: React.MouseEvent) => {
@@ -266,7 +279,7 @@ export default function Wardrobe({ roomRotation, effectiveScale }: Props) {
       const newLen = clamp(origLen + delta, MIN_LEN, maxLen)
       const newCx = rightEndX - (newLen / 2) * cos
       const newCy = rightEndY - (newLen / 2) * sin
-      setState(prev => ({ ...prev, x: newCx - newLen / 2, y: newCy - THICKNESS / 2, len: newLen }))
+      updateState(prev => ({ ...prev, x: newCx - newLen / 2, y: newCy - THICKNESS / 2, len: newLen }))
     }
     const onUp = () => {
       window.removeEventListener('mousemove', onMove)
@@ -274,7 +287,7 @@ export default function Wardrobe({ roomRotation, effectiveScale }: Props) {
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
-  }, [roomRotation, effectiveScale])
+  }, [roomRotation, effectiveScale, updateState])
 
   const onResizeLeftTouchStart = useCallback((e: React.TouchEvent) => {
     e.preventDefault()
@@ -299,7 +312,7 @@ export default function Wardrobe({ roomRotation, effectiveScale }: Props) {
       const newLen = clamp(origLen + delta, MIN_LEN, maxLen)
       const newCx = rightEndX - (newLen / 2) * cos
       const newCy = rightEndY - (newLen / 2) * sin
-      setState(prev => ({ ...prev, x: newCx - newLen / 2, y: newCy - THICKNESS / 2, len: newLen }))
+      updateState(prev => ({ ...prev, x: newCx - newLen / 2, y: newCy - THICKNESS / 2, len: newLen }))
     }
     const onUp = () => {
       window.removeEventListener('touchmove', onMove)
@@ -307,9 +320,9 @@ export default function Wardrobe({ roomRotation, effectiveScale }: Props) {
     }
     window.addEventListener('touchmove', onMove, { passive: false })
     window.addEventListener('touchend', onUp)
-  }, [roomRotation, effectiveScale])
+  }, [roomRotation, effectiveScale, updateState])
 
-  const { x, y, len, rotation } = state
+  const { x, y, len, rotation, name } = state
 
   // 柜门数量（每扇约65px宽）
   const doorCount = Math.max(2, Math.round(len / 65))
@@ -345,7 +358,29 @@ export default function Wardrobe({ roomRotation, effectiveScale }: Props) {
             </div>
           ))}
         </div>
+        {name && (
+          <div className="pointer-events-none absolute inset-0 z-[2] flex items-center justify-center px-2">
+            <span className="max-w-full truncate rounded-full bg-slate-950/45 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-amber-100 shadow-sm">
+              {name}
+            </span>
+          </div>
+        )}
       </div>
+
+      {isManual && deleteMode && (
+        <button
+          data-delete-handle
+          type="button"
+          title="删除元素"
+          style={{ position: 'absolute', top: -9, right: -9, zIndex: 20, transform: `rotate(${-rotation}deg)` }}
+          className="grid size-5 place-items-center rounded-full border border-white/70 bg-red-500 text-sm font-bold leading-none text-white shadow-md shadow-black/30 transition-transform hover:scale-110 active:scale-95"
+          onMouseDown={e => { e.preventDefault(); e.stopPropagation() }}
+          onTouchStart={e => { e.preventDefault(); e.stopPropagation() }}
+          onClick={e => { e.preventDefault(); e.stopPropagation(); onDeleteClick?.() }}
+        >
+          <span className="-mt-px block leading-none">−</span>
+        </button>
+      )}
 
       {/* 旋转按钮 */}
       <div
