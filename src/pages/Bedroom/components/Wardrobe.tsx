@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ROOM_H, ROOM_W, clamp, clampToRoom, maxLenFromEnd, screenToRoom } from '../geometry'
+import { ROOM_H, ROOM_W, clamp, clampToRoom, maxLenFromEnd } from '../geometry'
+import { type DragDelta, useRoomDrag } from '../useRoomDrag'
 
 const STORAGE_KEY = 'bedroom_wardrobe_state'
 const THICKNESS = 60
@@ -43,6 +44,40 @@ function loadState(): WardrobeItem {
   return { x, y, len, rotation: 0 }
 }
 
+/** 一次长度调整拖拽开始时的快照：固定端坐标、朝向、最大长度 */
+interface ResizeStart {
+  cos: number
+  sin: number
+  /** 固定不动的那一端（另一端跟随指针） */
+  endX: number
+  endY: number
+  origLen: number
+  maxLen: number
+  /** +1：右侧手柄（固定左端，向右生长）；-1：左侧手柄（固定右端，向左生长） */
+  sign: 1 | -1
+}
+
+function resizeStart(s: WardrobeItem, sign: 1 | -1): ResizeStart {
+  const rad = (s.rotation * Math.PI) / 180
+  const cos = Math.cos(rad)
+  const sin = Math.sin(rad)
+  const cx0 = s.x + s.len / 2
+  const cy0 = s.y + THICKNESS / 2
+  // 固定端在 -sign 方向：右侧手柄固定左端，左侧手柄固定右端
+  const endX = cx0 - sign * (s.len / 2) * cos
+  const endY = cy0 - sign * (s.len / 2) * sin
+  const maxLen = maxLenFromEnd(endX, endY, s.rotation, THICKNESS, MIN_LEN, sign)
+  return { cos, sin, endX, endY, origLen: s.len, maxLen, sign }
+}
+
+function resizeApply(local: { dx: number; dy: number }, st: ResizeStart): Pick<WardrobeItem, 'x' | 'y' | 'len'> {
+  const delta = st.sign * (local.dx * st.cos + local.dy * st.sin)
+  const newLen = clamp(st.origLen + delta, MIN_LEN, st.maxLen)
+  const newCx = st.endX + st.sign * (newLen / 2) * st.cos
+  const newCy = st.endY + st.sign * (newLen / 2) * st.sin
+  return { x: newCx - newLen / 2, y: newCy - THICKNESS / 2, len: newLen }
+}
+
 export default function Wardrobe({ roomRotation, effectiveScale, value, onChange, isManual = false, deleteMode = false, onDeleteClick }: Props) {
   const [internalState, setInternalState] = useState<WardrobeItem>(loadState)
   const state = value ? normalizeState(value) : internalState
@@ -60,54 +95,18 @@ export default function Wardrobe({ roomRotation, effectiveScale, value, onChange
   }, [state, internalState, value])
 
   // 拖拽移动
-  const onDragMouseDown = useCallback((e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('[data-rotate-handle],[data-resize-handle],[data-delete-handle]')) return
-    e.preventDefault()
-    const startX = e.clientX
-    const startY = e.clientY
-    const origX = stateRef.current.x
-    const origY = stateRef.current.y
-    const snapRoomRotation = roomRotation
-    const snapScale = effectiveScale
-    const onMove = (ev: MouseEvent) => {
-      const { len, rotation } = stateRef.current
-      const local = screenToRoom(ev.clientX - startX, ev.clientY - startY, snapRoomRotation, snapScale)
-      const clamped = clampToRoom(origX + local.dx, origY + local.dy, len, THICKNESS, rotation)
-      updateState(prev => ({ ...prev, ...clamped }))
-    }
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }, [roomRotation, effectiveScale, updateState])
-
-  const onDragTouchStart = useCallback((e: React.TouchEvent) => {
-    if ((e.target as HTMLElement).closest('[data-rotate-handle],[data-resize-handle],[data-delete-handle]')) return
-    e.preventDefault()
-    const touch = e.touches[0]
-    const startX = touch.clientX
-    const startY = touch.clientY
-    const origX = stateRef.current.x
-    const origY = stateRef.current.y
-    const snapRoomRotation = roomRotation
-    const snapScale = effectiveScale
-    const onMove = (ev: TouchEvent) => {
-      ev.preventDefault()
-      const t = ev.touches[0]
-      const { len, rotation } = stateRef.current
-      const local = screenToRoom(t.clientX - startX, t.clientY - startY, snapRoomRotation, snapScale)
-      const clamped = clampToRoom(origX + local.dx, origY + local.dy, len, THICKNESS, rotation)
-      updateState(prev => ({ ...prev, ...clamped }))
-    }
-    const onUp = () => {
-      window.removeEventListener('touchmove', onMove)
-      window.removeEventListener('touchend', onUp)
-    }
-    window.addEventListener('touchmove', onMove, { passive: false })
-    window.addEventListener('touchend', onUp)
-  }, [roomRotation, effectiveScale, updateState])
+  const onDragStart = useCallback(() => ({ ...stateRef.current }), [])
+  const onDrag = useCallback(({ local }: DragDelta, start: WardrobeItem) => {
+    const clamped = clampToRoom(start.x + local.dx, start.y + local.dy, start.len, THICKNESS, start.rotation)
+    updateState(prev => ({ ...prev, ...clamped }))
+  }, [updateState])
+  const onBodyPointerDown = useRoomDrag({
+    roomRotation,
+    effectiveScale,
+    ignoreSelector: '[data-rotate-handle],[data-resize-handle],[data-delete-handle]',
+    onStart: onDragStart,
+    onDrag,
+  })
 
   // 旋转
   const onRotateClick = useCallback((e: React.MouseEvent) => {
@@ -115,135 +114,14 @@ export default function Wardrobe({ roomRotation, effectiveScale, value, onChange
     updateState(prev => ({ ...prev, rotation: prev.rotation + 90 }))
   }, [updateState])
 
-  // 右侧 handle：固定左端，改 len 并反推 x/y
-  const onResizeRightMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    const startX = e.clientX
-    const startY = e.clientY
-    const { x: origX, y: origY, len: origLen, rotation: origRot } = stateRef.current
-    const snapRoomRotation = roomRotation
-    const snapScale = effectiveScale
-    const rad = (origRot * Math.PI) / 180
-    const cos = Math.cos(rad), sin = Math.sin(rad)
-    // 固定左端绝对坐标
-    const cx0 = origX + origLen / 2, cy0 = origY + THICKNESS / 2
-    const leftEndX = cx0 - (origLen / 2) * cos
-    const leftEndY = cy0 - (origLen / 2) * sin
-    const maxLen = maxLenFromEnd(leftEndX, leftEndY, origRot, THICKNESS, MIN_LEN, 1)
-    const onMove = (ev: MouseEvent) => {
-      const local = screenToRoom(ev.clientX - startX, ev.clientY - startY, snapRoomRotation, snapScale)
-      const delta = local.dx * cos + local.dy * sin
-      const newLen = clamp(origLen + delta, MIN_LEN, maxLen)
-      const newCx = leftEndX + (newLen / 2) * cos
-      const newCy = leftEndY + (newLen / 2) * sin
-      updateState(prev => ({ ...prev, x: newCx - newLen / 2, y: newCy - THICKNESS / 2, len: newLen }))
-    }
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }, [roomRotation, effectiveScale, updateState])
-
-  const onResizeRightTouchStart = useCallback((e: React.TouchEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    const touch = e.touches[0]
-    const startX = touch.clientX
-    const startY = touch.clientY
-    const { x: origX, y: origY, len: origLen, rotation: origRot } = stateRef.current
-    const snapRoomRotation = roomRotation
-    const snapScale = effectiveScale
-    const rad = (origRot * Math.PI) / 180
-    const cos = Math.cos(rad), sin = Math.sin(rad)
-    const cx0 = origX + origLen / 2, cy0 = origY + THICKNESS / 2
-    const leftEndX = cx0 - (origLen / 2) * cos
-    const leftEndY = cy0 - (origLen / 2) * sin
-    const maxLen = maxLenFromEnd(leftEndX, leftEndY, origRot, THICKNESS, MIN_LEN, 1)
-    const onMove = (ev: TouchEvent) => {
-      ev.preventDefault()
-      const t = ev.touches[0]
-      const local = screenToRoom(t.clientX - startX, t.clientY - startY, snapRoomRotation, snapScale)
-      const delta = local.dx * cos + local.dy * sin
-      const newLen = clamp(origLen + delta, MIN_LEN, maxLen)
-      const newCx = leftEndX + (newLen / 2) * cos
-      const newCy = leftEndY + (newLen / 2) * sin
-      updateState(prev => ({ ...prev, x: newCx - newLen / 2, y: newCy - THICKNESS / 2, len: newLen }))
-    }
-    const onUp = () => {
-      window.removeEventListener('touchmove', onMove)
-      window.removeEventListener('touchend', onUp)
-    }
-    window.addEventListener('touchmove', onMove, { passive: false })
-    window.addEventListener('touchend', onUp)
-  }, [roomRotation, effectiveScale, updateState])
-
-  // 左侧 handle：固定右端，改 len 并反推 x/y
-  const onResizeLeftMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    const startX = e.clientX
-    const startY = e.clientY
-    const { x: origX, y: origY, len: origLen, rotation: origRot } = stateRef.current
-    const snapRoomRotation = roomRotation
-    const snapScale = effectiveScale
-    const rad = (origRot * Math.PI) / 180
-    const cos = Math.cos(rad), sin = Math.sin(rad)
-    // 固定右端绝对坐标
-    const cx0 = origX + origLen / 2, cy0 = origY + THICKNESS / 2
-    const rightEndX = cx0 + (origLen / 2) * cos
-    const rightEndY = cy0 + (origLen / 2) * sin
-    const maxLen = maxLenFromEnd(rightEndX, rightEndY, origRot, THICKNESS, MIN_LEN, -1)
-    const onMove = (ev: MouseEvent) => {
-      const local = screenToRoom(ev.clientX - startX, ev.clientY - startY, snapRoomRotation, snapScale)
-      const delta = -(local.dx * cos + local.dy * sin)
-      const newLen = clamp(origLen + delta, MIN_LEN, maxLen)
-      const newCx = rightEndX - (newLen / 2) * cos
-      const newCy = rightEndY - (newLen / 2) * sin
-      updateState(prev => ({ ...prev, x: newCx - newLen / 2, y: newCy - THICKNESS / 2, len: newLen }))
-    }
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }, [roomRotation, effectiveScale, updateState])
-
-  const onResizeLeftTouchStart = useCallback((e: React.TouchEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    const touch = e.touches[0]
-    const startX = touch.clientX
-    const startY = touch.clientY
-    const { x: origX, y: origY, len: origLen, rotation: origRot } = stateRef.current
-    const snapRoomRotation = roomRotation
-    const snapScale = effectiveScale
-    const rad = (origRot * Math.PI) / 180
-    const cos = Math.cos(rad), sin = Math.sin(rad)
-    const cx0 = origX + origLen / 2, cy0 = origY + THICKNESS / 2
-    const rightEndX = cx0 + (origLen / 2) * cos
-    const rightEndY = cy0 + (origLen / 2) * sin
-    const maxLen = maxLenFromEnd(rightEndX, rightEndY, origRot, THICKNESS, MIN_LEN, -1)
-    const onMove = (ev: TouchEvent) => {
-      ev.preventDefault()
-      const t = ev.touches[0]
-      const local = screenToRoom(t.clientX - startX, t.clientY - startY, snapRoomRotation, snapScale)
-      const delta = -(local.dx * cos + local.dy * sin)
-      const newLen = clamp(origLen + delta, MIN_LEN, maxLen)
-      const newCx = rightEndX - (newLen / 2) * cos
-      const newCy = rightEndY - (newLen / 2) * sin
-      updateState(prev => ({ ...prev, x: newCx - newLen / 2, y: newCy - THICKNESS / 2, len: newLen }))
-    }
-    const onUp = () => {
-      window.removeEventListener('touchmove', onMove)
-      window.removeEventListener('touchend', onUp)
-    }
-    window.addEventListener('touchmove', onMove, { passive: false })
-    window.addEventListener('touchend', onUp)
-  }, [roomRotation, effectiveScale, updateState])
+  // 长度调整：右侧手柄固定左端、左侧手柄固定右端
+  const onResize = useCallback(({ local }: DragDelta, st: ResizeStart) => {
+    updateState(prev => ({ ...prev, ...resizeApply(local, st) }))
+  }, [updateState])
+  const onResizeRightStart = useCallback(() => resizeStart(stateRef.current, 1), [])
+  const onResizeLeftStart = useCallback(() => resizeStart(stateRef.current, -1), [])
+  const onResizeRightPointerDown = useRoomDrag({ roomRotation, effectiveScale, onStart: onResizeRightStart, onDrag: onResize })
+  const onResizeLeftPointerDown = useRoomDrag({ roomRotation, effectiveScale, onStart: onResizeLeftStart, onDrag: onResize })
 
   const { x, y, len, rotation, name } = state
 
@@ -262,9 +140,9 @@ export default function Wardrobe({ roomRotation, effectiveScale, value, onChange
         transformOrigin: 'center',
         cursor: 'grab',
         userSelect: 'none',
+        touchAction: 'none',
       }}
-      onMouseDown={onDragMouseDown}
-      onTouchStart={onDragTouchStart}
+      onPointerDown={onBodyPointerDown}
     >
       {/* 柜体 */}
       <div className="relative size-full overflow-hidden rounded-lg border border-amber-200/30 bg-gradient-to-b from-slate-700/80 to-slate-800/70 shadow-lg shadow-black/40">
@@ -332,10 +210,10 @@ export default function Wardrobe({ roomRotation, effectiveScale, value, onChange
           width: 12,
           height: 28,
           cursor: 'ew-resize',
+          touchAction: 'none',
         }}
         className="flex items-center justify-center rounded-sm border border-amber-200/50 bg-slate-600/80 hover:bg-amber-300/60"
-        onMouseDown={onResizeLeftMouseDown}
-        onTouchStart={onResizeLeftTouchStart}
+        onPointerDown={onResizeLeftPointerDown}
       >
         <div className="flex gap-0.5">
           <div className="h-3 w-px rounded-full bg-amber-200/70" />
@@ -356,10 +234,10 @@ export default function Wardrobe({ roomRotation, effectiveScale, value, onChange
           width: 12,
           height: 28,
           cursor: 'ew-resize',
+          touchAction: 'none',
         }}
         className="flex items-center justify-center rounded-sm border border-amber-200/50 bg-slate-600/80 hover:bg-amber-300/60"
-        onMouseDown={onResizeRightMouseDown}
-        onTouchStart={onResizeRightTouchStart}
+        onPointerDown={onResizeRightPointerDown}
       >
         <div className="flex gap-0.5">
           <div className="h-3 w-px rounded-full bg-amber-200/70" />

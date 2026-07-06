@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
-import { clamp, screenToRoom } from '../geometry'
+import { clamp } from '../geometry'
 import { DOOR_W, DOOR_X_MAX, DOOR_X_MIN, saveDoorX } from '../doorPosition'
+import { type DragDelta, useRoomDrag } from '../useRoomDrag'
 
 interface Props { x: number; onXChange: (x: number) => void; roomRotation: number; effectiveScale: number }
 
@@ -12,32 +13,19 @@ export default function BathroomDoor({ x, onXChange, roomRotation, effectiveScal
     saveDoorX(x)
   }, [x])
 
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    const startClientX = e.clientX
-    const startClientY = e.clientY
-    const startX = xRef.current
-    const snapRoomRotation = roomRotation
-    const snapScale = effectiveScale
-    const onMove = (ev: MouseEvent) => {
-      // 厕所门只在房间 X 轴（水平）方向滑动，取本地 dx
-      const local = screenToRoom(ev.clientX - startClientX, ev.clientY - startClientY, snapRoomRotation, snapScale)
-      onXChange(clamp(startX + local.dx, DOOR_X_MIN, DOOR_X_MAX))
-    }
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }, [onXChange, roomRotation, effectiveScale])
+  const onDragStart = useCallback(() => xRef.current, [])
+  const onDrag = useCallback(({ local }: DragDelta, startX: number) => {
+    // 厕所门只在房间 X 轴（水平）方向滑动，取本地 dx
+    onXChange(clamp(startX + local.dx, DOOR_X_MIN, DOOR_X_MAX))
+  }, [onXChange])
+  const onPointerDown = useRoomDrag({ roomRotation, effectiveScale, onStart: onDragStart, onDrag })
 
   return (
     <>
       <div style={{ position: 'absolute', top: 0, left: x, width: DOOR_W, height: 4 }} className="bg-indigo-950/60" />
       <div
-        style={{ position: 'absolute', top: 0, left: x, width: DOOR_W, height: DOOR_W, cursor: 'ew-resize' }}
-        onMouseDown={onMouseDown}
+        style={{ position: 'absolute', top: 0, left: x, width: DOOR_W, height: DOOR_W, cursor: 'ew-resize', touchAction: 'none' }}
+        onPointerDown={onPointerDown}
       >
         <div
           style={{

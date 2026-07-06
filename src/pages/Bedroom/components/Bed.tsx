@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { clampToRoom, screenToRoom } from '../geometry'
+import { clampToRoom } from '../geometry'
+import { type DragDelta, useRoomDrag } from '../useRoomDrag'
 
 const STORAGE_KEY = 'bedroom_bed_state'
 const BED_W = 200
@@ -37,58 +38,18 @@ export default function Bed({ roomRotation, effectiveScale }: Props) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
   }, [state])
 
-  const onDragMouseDown = useCallback((e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('[data-rotate-handle]')) return
-    e.preventDefault()
-
-    const startX = e.clientX
-    const startY = e.clientY
-    const origX = stateRef.current.x
-    const origY = stateRef.current.y
-    const snapRoomRotation = roomRotation
-    const snapScale = effectiveScale
-
-    const onMove = (ev: MouseEvent) => {
-      const { rotation } = stateRef.current
-      const local = screenToRoom(ev.clientX - startX, ev.clientY - startY, snapRoomRotation, snapScale)
-      const clamped = clampToRoom(origX + local.dx, origY + local.dy, BED_W, BED_H, rotation)
-      setState(prev => ({ ...prev, ...clamped }))
-    }
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }, [roomRotation, effectiveScale])
-
-  const onDragTouchStart = useCallback((e: React.TouchEvent) => {
-    if ((e.target as HTMLElement).closest('[data-rotate-handle]')) return
-    e.preventDefault()
-
-    const touch = e.touches[0]
-    const startX = touch.clientX
-    const startY = touch.clientY
-    const origX = stateRef.current.x
-    const origY = stateRef.current.y
-    const snapRoomRotation = roomRotation
-    const snapScale = effectiveScale
-
-    const onMove = (ev: TouchEvent) => {
-      ev.preventDefault()
-      const t = ev.touches[0]
-      const { rotation } = stateRef.current
-      const local = screenToRoom(t.clientX - startX, t.clientY - startY, snapRoomRotation, snapScale)
-      const clamped = clampToRoom(origX + local.dx, origY + local.dy, BED_W, BED_H, rotation)
-      setState(prev => ({ ...prev, ...clamped }))
-    }
-    const onUp = () => {
-      window.removeEventListener('touchmove', onMove)
-      window.removeEventListener('touchend', onUp)
-    }
-    window.addEventListener('touchmove', onMove, { passive: false })
-    window.addEventListener('touchend', onUp)
-  }, [roomRotation, effectiveScale])
+  const onDragStart = useCallback(() => ({ ...stateRef.current }), [])
+  const onDrag = useCallback(({ local }: DragDelta, start: BedState) => {
+    const clamped = clampToRoom(start.x + local.dx, start.y + local.dy, BED_W, BED_H, start.rotation)
+    setState(prev => ({ ...prev, ...clamped }))
+  }, [])
+  const onPointerDown = useRoomDrag({
+    roomRotation,
+    effectiveScale,
+    ignoreSelector: '[data-rotate-handle]',
+    onStart: onDragStart,
+    onDrag,
+  })
 
   const onRotateClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
@@ -111,9 +72,9 @@ export default function Bed({ roomRotation, effectiveScale }: Props) {
         transformOrigin: 'center',
         cursor: 'grab',
         userSelect: 'none',
+        touchAction: 'none',
       }}
-      onMouseDown={onDragMouseDown}
-      onTouchStart={onDragTouchStart}
+      onPointerDown={onPointerDown}
     >
       {/* 床主体 */}
       <div className="relative size-full overflow-hidden rounded-2xl border border-amber-200/25 bg-gradient-to-b from-amber-950/70 to-amber-900/40 shadow-lg shadow-black/30">
