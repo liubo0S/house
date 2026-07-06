@@ -5,10 +5,10 @@ import AddElementDialog from './components/AddElementDialog'
 import ConfirmDeleteDialog from './components/ConfirmDeleteDialog'
 import RoomFloorPlan from './components/RoomFloorPlan'
 import Toolbar from './components/Toolbar'
-import { loadDoorX } from './doorPosition'
-import { type Furniture, createManualElement } from './furniture'
-import { FURNITURE_STORAGE_KEY, loadFurniture } from './furnitureStore'
-import { useAutoScale } from './useAutoScale'
+import { loadDoorX } from './model/doorPosition'
+import { type Furniture, createManualElement } from './model/furniture'
+import { FURNITURE_STORAGE_KEY, loadFurniture } from './model/furnitureStore'
+import { useAutoScale } from './hooks/useAutoScale'
 
 export default function BedroomPage() {
   const [doorX, setDoorX] = useState(loadDoorX)

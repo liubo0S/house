@@ -25,24 +25,21 @@
 
 ```
 src/
-├── App.tsx              路由定义
+├── App.tsx              路由定义（含未知路径兜底）
 ├── main.tsx             应用入口（ErrorBoundary + GitHub Pages basename）
-├── components/          ErrorBoundary
-├── hooks/               usePersistentState / useLatestRef
+├── components/          全局组件：ErrorBoundary
+├── hooks/               全局 hooks：usePersistentState / useLatestRef
 └── pages/
     ├── Home/            首页
     └── Bedroom/         卧室页
-        ├── index.tsx           页面容器：工具栏、房间渲染、弹窗
-        ├── furniture.ts        家具数据模型与种类规格（kind → 尺寸/是否可缩放）
-        ├── furnitureStore.ts   家具布局的加载/迁移/持久化
-        ├── geometry.ts         房间几何计算（含单元测试）
-        ├── useRoomDrag.ts      Pointer Events 拖拽 hook
-        ├── useAutoScale.ts     自适应缩放 hook
-        ├── components/         DraggableFurniture、Toolbar、Modal、弹窗、图标
-        └── views/              各家具外观（BedView / WardrobeView）+ 注册表
+        ├── index.tsx        页面容器：工具栏、房间渲染、弹窗
+        ├── components/      交互 UI：RoomFloorPlan、DraggableFurniture、Toolbar、Modal、弹窗、图标
+        ├── views/           家具外观（BedView / WardrobeView）+ 注册表
+        ├── hooks/           useRoomDrag（拖拽）、useAutoScale（自适应缩放）
+        └── model/           领域模型与工具：furniture、furnitureStore、geometry、roomLayout、doorPosition（含单元测试）
 ```
 
-新增一种家具：加一个 `views/XxxView.tsx`，在 `views/registry.ts` 注册，并在 `furniture.ts` 的 `KIND_SPECS` 补一条规格即可。
+新增一种家具：加一个 `views/XxxView.tsx`，在 `views/registry.ts` 注册，并在 `model/furniture.ts` 的 `KIND_SPECS` 补一条规格即可。
 
 ## 本地开发
 

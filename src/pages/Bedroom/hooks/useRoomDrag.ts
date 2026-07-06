@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { screenToRoom } from './geometry'
+import { screenToRoom } from '../model/geometry'
 
 export interface DragDelta {
   /** 房间本地坐标增量（已抵消房间旋转与缩放） */

@@ -1,8 +1,8 @@
 import { useCallback } from 'react'
 import { useLatestRef } from '../../../hooks/useLatestRef'
-import { type Furniture, KIND_SPECS, normalizeFurniture } from '../furniture'
-import { clamp, clampToRoom, maxLenFromEnd } from '../geometry'
-import { type DragDelta, useRoomDrag } from '../useRoomDrag'
+import { type Furniture, KIND_SPECS, normalizeFurniture } from '../model/furniture'
+import { clamp, clampToRoom, maxLenFromEnd } from '../model/geometry'
+import { type DragDelta, useRoomDrag } from '../hooks/useRoomDrag'
 import { FURNITURE_VIEWS } from '../views/registry'
 import { RotateIcon } from './icons'
 

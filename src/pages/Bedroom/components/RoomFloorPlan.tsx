@@ -1,9 +1,9 @@
 import BathroomDoor from './BathroomDoor'
 import DraggableFurniture from './DraggableFurniture'
-import { DOOR_W } from '../doorPosition'
-import type { Furniture } from '../furniture'
-import { ROOM_H, ROOM_W } from '../geometry'
-import { ENTRY_DOOR, NORTH_WINDOW, WEST_WINDOW } from '../roomLayout'
+import { DOOR_W } from '../model/doorPosition'
+import type { Furniture } from '../model/furniture'
+import { ROOM_H, ROOM_W } from '../model/geometry'
+import { ENTRY_DOOR, NORTH_WINDOW, WEST_WINDOW } from '../model/roomLayout'
 
 interface Props {
   furniture: Furniture[]

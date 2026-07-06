@@ -1,4 +1,4 @@
-import type { Furniture } from '../furniture'
+import type { Furniture } from '../model/furniture'
 
 interface Props {
   item: Furniture

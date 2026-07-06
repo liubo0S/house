@@ -1,8 +1,8 @@
 import { useCallback, useEffect } from 'react'
 import { useLatestRef } from '../../../hooks/useLatestRef'
-import { clamp } from '../geometry'
-import { DOOR_W, DOOR_X_MAX, DOOR_X_MIN, saveDoorX } from '../doorPosition'
-import { type DragDelta, useRoomDrag } from '../useRoomDrag'
+import { clamp } from '../model/geometry'
+import { DOOR_W, DOOR_X_MAX, DOOR_X_MIN, saveDoorX } from '../model/doorPosition'
+import { type DragDelta, useRoomDrag } from '../hooks/useRoomDrag'
 
 interface Props { x: number; onXChange: (x: number) => void; roomRotation: number; effectiveScale: number }
 

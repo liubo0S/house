@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react'
-import type { Furniture, FurnitureKind } from '../furniture'
+import type { Furniture, FurnitureKind } from '../model/furniture'
 import BedView from './BedView'
 import WardrobeView from './WardrobeView'
 
