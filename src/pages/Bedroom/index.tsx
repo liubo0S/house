@@ -1,52 +1,24 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { usePersistentState } from '../../hooks/usePersistentState'
 import AddElementDialog from './components/AddElementDialog'
 import BathroomDoor from './components/BathroomDoor'
-import Bed from './components/Bed'
 import ConfirmDeleteDialog from './components/ConfirmDeleteDialog'
-import RoomElement, { type RoomElementItem } from './components/RoomElement'
+import DraggableFurniture from './components/DraggableFurniture'
 import Toolbar from './components/Toolbar'
 import { DOOR_W, loadDoorX } from './doorPosition'
+import { type Furniture, createManualElement } from './furniture'
+import { FURNITURE_STORAGE_KEY, loadFurniture } from './furnitureStore'
 import { ROOM_H, ROOM_W } from './geometry'
 import { ENTRY_DOOR, NORTH_WINDOW, WEST_WINDOW } from './roomLayout'
 import { useAutoScale } from './useAutoScale'
-
-const MANUAL_ELEMENTS_KEY = 'bedroom_manual_wardrobes_state'
-const ELEMENT_THICKNESS = 60
-const MANUAL_DEFAULT_LEN = 100
-
-function loadManualElements(): RoomElementItem[] {
-  try {
-    const saved = localStorage.getItem(MANUAL_ELEMENTS_KEY)
-    if (!saved) return []
-    const parsed = JSON.parse(saved)
-    if (!Array.isArray(parsed)) return []
-    return parsed.filter(item => typeof item?.id === 'string' && typeof item?.name === 'string')
-  } catch {
-    return []
-  }
-}
-
-function createManualElement(name: string, count: number): RoomElementItem {
-  const offset = (count % 6) * 14
-  const x = Math.min(ROOM_W - MANUAL_DEFAULT_LEN - 16, 24 + offset)
-  const y = Math.min(ROOM_H - ELEMENT_THICKNESS - 16, 24 + offset)
-  return {
-    id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    name,
-    x,
-    y,
-    len: MANUAL_DEFAULT_LEN,
-    rotation: 0,
-  }
-}
 
 export default function BedroomPage() {
   const [doorX, setDoorX] = useState(loadDoorX)
   const { cardRef, naturalSize, autoScale } = useAutoScale()
   const [userZoom, setUserZoom] = useState(1)
   const [roomRotation, setRoomRotation] = useState(0)
-  const [manualElements, setManualElements] = useState<RoomElementItem[]>(loadManualElements)
+  const [furniture, setFurniture] = usePersistentState(FURNITURE_STORAGE_KEY, loadFurniture)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [deleteMode, setDeleteMode] = useState(false)
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
@@ -55,25 +27,21 @@ export default function BedroomPage() {
   const isRotated90 = roomRotation % 180 !== 0
   const visualW = naturalSize.w ? (isRotated90 ? naturalSize.h : naturalSize.w) * effectiveScale : undefined
   const visualH = naturalSize.w ? (isRotated90 ? naturalSize.w : naturalSize.h) * effectiveScale : undefined
-  const pendingDeleteName = manualElements.find(item => item.id === pendingDeleteId)?.name
-
-  useEffect(() => {
-    localStorage.setItem(MANUAL_ELEMENTS_KEY, JSON.stringify(manualElements))
-  }, [manualElements])
+  const removableCount = furniture.filter(f => f.removable).length
+  const pendingDeleteName = furniture.find(f => f.id === pendingDeleteId)?.name
 
   const addManualElement = (name: string) => {
-    setManualElements(prev => [...prev, createManualElement(name, prev.length)])
+    setFurniture(prev => [...prev, createManualElement(name, prev.filter(f => f.removable).length)])
     setIsAddDialogOpen(false)
   }
 
-  const updateManualElement = (id: string | undefined, next: RoomElementItem) => {
-    if (!id) return
-    setManualElements(prev => prev.map(item => (item.id === id ? { ...next, id, name: item.name } : item)))
+  const updateFurniture = (id: string, next: Furniture) => {
+    setFurniture(prev => prev.map(f => (f.id === id ? next : f)))
   }
 
   const confirmDelete = () => {
     if (!pendingDeleteId) return
-    setManualElements(prev => prev.filter(item => item.id !== pendingDeleteId))
+    setFurniture(prev => prev.filter(f => f.id !== pendingDeleteId))
     setPendingDeleteId(null)
   }
 
@@ -174,20 +142,17 @@ export default function BedroomPage() {
                     </div>
                   </div>
 
-                  {/* 房间平面图容器（overflow-hidden 裁剪床） */}
+                  {/* 房间平面图容器（overflow-hidden 裁剪家具） */}
                   <div className="isolate size-full overflow-hidden rounded-2xl border-2 border-dashed border-amber-300/40 bg-indigo-950/60">
-                    <Bed roomRotation={roomRotation} effectiveScale={effectiveScale} />
-                    <RoomElement roomRotation={roomRotation} effectiveScale={effectiveScale} />
-                    {manualElements.map(item => (
-                      <RoomElement
+                    {furniture.map(item => (
+                      <DraggableFurniture
                         key={item.id}
-                        value={item}
-                        isManual
-                        deleteMode={deleteMode}
+                        item={item}
                         roomRotation={roomRotation}
                         effectiveScale={effectiveScale}
-                        onChange={next => updateManualElement(item.id, next)}
-                        onDeleteClick={() => setPendingDeleteId(item.id ?? null)}
+                        deleteMode={deleteMode}
+                        onChange={next => updateFurniture(item.id, next)}
+                        onDeleteClick={() => setPendingDeleteId(item.id)}
                       />
                     ))}
                     <BathroomDoor x={doorX} onXChange={setDoorX} roomRotation={roomRotation} effectiveScale={effectiveScale} />
@@ -245,7 +210,7 @@ export default function BedroomPage() {
           <button
             type="button"
             onClick={() => setDeleteMode(mode => !mode)}
-            disabled={manualElements.length === 0}
+            disabled={removableCount === 0}
             className="rounded-full border border-white/15 px-5 py-2 text-sm font-semibold text-slate-100 transition hover:border-red-300/70 hover:bg-red-400/20 active:scale-95 disabled:cursor-not-allowed disabled:opacity-45"
           >
             删除元素
