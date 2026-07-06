@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { useLatestRef } from '../../../hooks/useLatestRef'
 import { ROOM_H, ROOM_W, clamp, clampToRoom, maxLenFromEnd } from '../geometry'
 import { type DragDelta, useRoomDrag } from '../useRoomDrag'
 import { RotateIcon } from './icons'
@@ -82,21 +83,20 @@ function resizeApply(local: { dx: number; dy: number }, st: ResizeStart): Pick<R
 export default function RoomElement({ roomRotation, effectiveScale, value, onChange, isManual = false, deleteMode = false, onDeleteClick }: Props) {
   const [internalState, setInternalState] = useState<RoomElementItem>(loadState)
   const state = value ? normalizeState(value) : internalState
-  const stateRef = useRef(state)
+  const stateRef = useLatestRef(state)
 
   const updateState = useCallback((updater: (prev: RoomElementItem) => RoomElementItem) => {
     const next = normalizeState(updater(stateRef.current))
     if (value && onChange) onChange(next)
     else setInternalState(next)
-  }, [onChange, value])
+  }, [onChange, value, stateRef])
 
   useEffect(() => {
-    stateRef.current = state
     if (!value) localStorage.setItem(STORAGE_KEY, JSON.stringify(internalState))
-  }, [state, internalState, value])
+  }, [internalState, value])
 
   // 拖拽移动
-  const onDragStart = useCallback(() => ({ ...stateRef.current }), [])
+  const onDragStart = useCallback(() => ({ ...stateRef.current }), [stateRef])
   const onDrag = useCallback(({ local }: DragDelta, start: RoomElementItem) => {
     const clamped = clampToRoom(start.x + local.dx, start.y + local.dy, start.len, THICKNESS, start.rotation)
     updateState(prev => ({ ...prev, ...clamped }))
@@ -119,8 +119,8 @@ export default function RoomElement({ roomRotation, effectiveScale, value, onCha
   const onResize = useCallback(({ local }: DragDelta, st: ResizeStart) => {
     updateState(prev => ({ ...prev, ...resizeApply(local, st) }))
   }, [updateState])
-  const onResizeRightStart = useCallback(() => resizeStart(stateRef.current, 1), [])
-  const onResizeLeftStart = useCallback(() => resizeStart(stateRef.current, -1), [])
+  const onResizeRightStart = useCallback(() => resizeStart(stateRef.current, 1), [stateRef])
+  const onResizeLeftStart = useCallback(() => resizeStart(stateRef.current, -1), [stateRef])
   const onResizeRightPointerDown = useRoomDrag({ roomRotation, effectiveScale, onStart: onResizeRightStart, onDrag: onResize })
   const onResizeLeftPointerDown = useRoomDrag({ roomRotation, effectiveScale, onStart: onResizeLeftStart, onDrag: onResize })
 

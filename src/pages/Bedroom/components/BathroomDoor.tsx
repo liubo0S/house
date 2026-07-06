@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect } from 'react'
+import { useLatestRef } from '../../../hooks/useLatestRef'
 import { clamp } from '../geometry'
 import { DOOR_W, DOOR_X_MAX, DOOR_X_MIN, saveDoorX } from '../doorPosition'
 import { type DragDelta, useRoomDrag } from '../useRoomDrag'
@@ -6,14 +7,13 @@ import { type DragDelta, useRoomDrag } from '../useRoomDrag'
 interface Props { x: number; onXChange: (x: number) => void; roomRotation: number; effectiveScale: number }
 
 export default function BathroomDoor({ x, onXChange, roomRotation, effectiveScale }: Props) {
-  const xRef = useRef(x)
+  const xRef = useLatestRef(x)
 
   useEffect(() => {
-    xRef.current = x
     saveDoorX(x)
   }, [x])
 
-  const onDragStart = useCallback(() => xRef.current, [])
+  const onDragStart = useCallback(() => xRef.current, [xRef])
   const onDrag = useCallback(({ local }: DragDelta, startX: number) => {
     // 厕所门只在房间 X 轴（水平）方向滑动，取本地 dx
     onXChange(clamp(startX + local.dx, DOOR_X_MIN, DOOR_X_MAX))

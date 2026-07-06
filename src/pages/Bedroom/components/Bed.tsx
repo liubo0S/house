@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback } from 'react'
+import { useLatestRef } from '../../../hooks/useLatestRef'
+import { usePersistentState } from '../../../hooks/usePersistentState'
 import { clampToRoom } from '../geometry'
 import { type DragDelta, useRoomDrag } from '../useRoomDrag'
 import { RotateIcon } from './icons'
@@ -31,19 +33,14 @@ function loadState(): BedState {
 }
 
 export default function Bed({ roomRotation, effectiveScale }: Props) {
-  const [state, setState] = useState<BedState>(loadState)
-  const stateRef = useRef(state)
+  const [state, setState] = usePersistentState(STORAGE_KEY, loadState)
+  const stateRef = useLatestRef(state)
 
-  useEffect(() => {
-    stateRef.current = state
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-  }, [state])
-
-  const onDragStart = useCallback(() => ({ ...stateRef.current }), [])
+  const onDragStart = useCallback(() => ({ ...stateRef.current }), [stateRef])
   const onDrag = useCallback(({ local }: DragDelta, start: BedState) => {
     const clamped = clampToRoom(start.x + local.dx, start.y + local.dy, BED_W, BED_H, start.rotation)
     setState(prev => ({ ...prev, ...clamped }))
-  }, [])
+  }, [setState])
   const onPointerDown = useRoomDrag({
     roomRotation,
     effectiveScale,
@@ -59,7 +56,7 @@ export default function Bed({ roomRotation, effectiveScale }: Props) {
       const clamped = clampToRoom(prev.x, prev.y, BED_W, BED_H, newRotation)
       return { ...clamped, rotation: newRotation }
     })
-  }, [])
+  }, [setState])
 
   return (
     <div
