@@ -1,12 +1,12 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import BathroomDoor, { DOOR_W, loadX } from './components/BathroomDoor'
+import BathroomDoor from './components/BathroomDoor'
 import Bed from './components/Bed'
 import Wardrobe, { type WardrobeItem } from './components/Wardrobe'
+import { DOOR_W, loadDoorX } from './doorPosition'
+import { ROOM_H, ROOM_W } from './geometry'
 
 const MANUAL_WARDROBES_KEY = 'bedroom_manual_wardrobes_state'
-const ROOM_W = 460
-const ROOM_H = 370
 const WARDROBE_THICKNESS = 60
 const MANUAL_DEFAULT_LEN = 100
 
@@ -37,7 +37,7 @@ function createManualWardrobe(name: string, count: number): WardrobeItem {
 }
 
 export default function BedroomPage() {
-  const [doorX, setDoorX] = useState(loadX)
+  const [doorX, setDoorX] = useState(loadDoorX)
   const cardRef = useRef<HTMLDivElement>(null)
   const [naturalSize, setNaturalSize] = useState({ w: 0, h: 0 })
   const [autoScale, setAutoScale] = useState(1)
@@ -202,7 +202,7 @@ export default function BedroomPage() {
               {/* 房间平面图：grid 布局，方向标注完全在房间外 */}
               <div
                 className="inline-grid"
-                style={{ gridTemplateColumns: 'auto 460px auto', gridTemplateRows: 'auto 370px auto' }}
+                style={{ gridTemplateColumns: `auto ${ROOM_W}px auto`, gridTemplateRows: `auto ${ROOM_H}px auto` }}
               >
                 {/* 西 - 上方居中 */}
                 <div className="col-start-2 row-start-1 flex flex-col items-center gap-1 pb-2">

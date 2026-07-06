@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { ROOM_H, ROOM_W, clamp, clampToRoom, maxLenFromEnd, screenToRoom } from '../geometry'
 
 const STORAGE_KEY = 'bedroom_wardrobe_state'
 const THICKNESS = 60
 const DEFAULT_LEN = 260
 const MIN_LEN = 60
-const ROOM_W = 460
-const ROOM_H = 370
-const WALL_BUFFER = 2
 
 export interface WardrobeItem {
   id?: string
@@ -27,85 +25,10 @@ interface Props {
   onDeleteClick?: () => void
 }
 
-/** 将屏幕坐标增量转换为房间本地坐标增量 */
-function screenToRoom(dx: number, dy: number, roomRotation: number, scale: number) {
-  const angle = -(roomRotation * Math.PI) / 180
-  const sx = dx / scale, sy = dy / scale
-  return {
-    dx: sx * Math.cos(angle) - sy * Math.sin(angle),
-    dy: sx * Math.sin(angle) + sy * Math.cos(angle),
-  }
-}
-
-function clamp(v: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, v))
-}
-
-/** 从左端点出发（右侧拖拽），计算在房间内能放下的最大柜子长度 */
-function maxLenFromLeft(lx: number, ly: number, rotation: number): number {
-  const rad = (rotation * Math.PI) / 180
-  const cos = Math.cos(rad), sin = Math.sin(rad)
-  const cosA = Math.abs(cos), sinA = Math.abs(sin)
-  const fits = (L: number) => {
-    const cx = lx + (L / 2) * cos
-    const cy = ly + (L / 2) * sin
-    const rw = L * cosA + THICKNESS * sinA
-    const rh = L * sinA + THICKNESS * cosA
-    return cx - rw / 2 >= WALL_BUFFER && cx + rw / 2 <= ROOM_W - WALL_BUFFER
-        && cy - rh / 2 >= WALL_BUFFER && cy + rh / 2 <= ROOM_H - WALL_BUFFER
-  }
-  if (!fits(MIN_LEN)) return MIN_LEN
-  let lo = MIN_LEN, hi = ROOM_W
-  for (let i = 0; i < 20; i++) {
-    const mid = (lo + hi) / 2
-    if (fits(mid)) lo = mid; else hi = mid
-  }
-  return lo
-}
-
-/** 从右端点出发（左侧拖拽），计算在房间内能放下的最大柜子长度 */
-function maxLenFromRight(rx: number, ry: number, rotation: number): number {
-  const rad = (rotation * Math.PI) / 180
-  const cos = Math.cos(rad), sin = Math.sin(rad)
-  const cosA = Math.abs(cos), sinA = Math.abs(sin)
-  const fits = (L: number) => {
-    const cx = rx - (L / 2) * cos
-    const cy = ry - (L / 2) * sin
-    const rw = L * cosA + THICKNESS * sinA
-    const rh = L * sinA + THICKNESS * cosA
-    return cx - rw / 2 >= WALL_BUFFER && cx + rw / 2 <= ROOM_W - WALL_BUFFER
-        && cy - rh / 2 >= WALL_BUFFER && cy + rh / 2 <= ROOM_H - WALL_BUFFER
-  }
-  if (!fits(MIN_LEN)) return MIN_LEN
-  let lo = MIN_LEN, hi = ROOM_W
-  for (let i = 0; i < 20; i++) {
-    const mid = (lo + hi) / 2
-    if (fits(mid)) lo = mid; else hi = mid
-  }
-  return lo
-}
-
-/** 根据旋转角计算旋转后包围盒并约束位置（宽=len, 高=THICKNESS） */
-function clampToRoom(x: number, y: number, len: number, rotation: number) {
-  const rad = (rotation * Math.PI) / 180
-  const cosR = Math.abs(Math.cos(rad))
-  const sinR = Math.abs(Math.sin(rad))
-  const rw = len * cosR + THICKNESS * sinR
-  const rh = len * sinR + THICKNESS * cosR
-  const xMin = rw / 2 - len / 2 + WALL_BUFFER
-  const xMax = ROOM_W - rw / 2 - len / 2 - WALL_BUFFER
-  const yMin = rh / 2 - THICKNESS / 2 + WALL_BUFFER
-  const yMax = ROOM_H - rh / 2 - THICKNESS / 2 - WALL_BUFFER
-  return {
-    x: clamp(x, xMin, Math.max(xMin, xMax)),
-    y: clamp(y, yMin, Math.max(yMin, yMax)),
-  }
-}
-
 function normalizeState(state: WardrobeItem): WardrobeItem {
   const len = Math.max(MIN_LEN, state.len || MIN_LEN)
   const rotation = state.rotation || 0
-  const clamped = clampToRoom(state.x, state.y, len, rotation)
+  const clamped = clampToRoom(state.x, state.y, len, THICKNESS, rotation)
   return { ...state, ...clamped, len, rotation }
 }
 
@@ -113,7 +36,7 @@ function loadState(): WardrobeItem {
   try {
     const saved = localStorage.getItem(STORAGE_KEY)
     if (saved) return normalizeState(JSON.parse(saved))
-  } catch {}
+  } catch { /* localStorage 不可用或数据损坏时回退默认值 */ }
   const len = DEFAULT_LEN
   const x = (ROOM_W - len) / 2
   const y = ROOM_H - THICKNESS - 20
@@ -124,7 +47,6 @@ export default function Wardrobe({ roomRotation, effectiveScale, value, onChange
   const [internalState, setInternalState] = useState<WardrobeItem>(loadState)
   const state = value ? normalizeState(value) : internalState
   const stateRef = useRef(state)
-  stateRef.current = state
 
   const updateState = useCallback((updater: (prev: WardrobeItem) => WardrobeItem) => {
     const next = normalizeState(updater(stateRef.current))
@@ -133,8 +55,9 @@ export default function Wardrobe({ roomRotation, effectiveScale, value, onChange
   }, [onChange, value])
 
   useEffect(() => {
+    stateRef.current = state
     if (!value) localStorage.setItem(STORAGE_KEY, JSON.stringify(internalState))
-  }, [internalState, value])
+  }, [state, internalState, value])
 
   // 拖拽移动
   const onDragMouseDown = useCallback((e: React.MouseEvent) => {
@@ -149,7 +72,7 @@ export default function Wardrobe({ roomRotation, effectiveScale, value, onChange
     const onMove = (ev: MouseEvent) => {
       const { len, rotation } = stateRef.current
       const local = screenToRoom(ev.clientX - startX, ev.clientY - startY, snapRoomRotation, snapScale)
-      const clamped = clampToRoom(origX + local.dx, origY + local.dy, len, rotation)
+      const clamped = clampToRoom(origX + local.dx, origY + local.dy, len, THICKNESS, rotation)
       updateState(prev => ({ ...prev, ...clamped }))
     }
     const onUp = () => {
@@ -175,7 +98,7 @@ export default function Wardrobe({ roomRotation, effectiveScale, value, onChange
       const t = ev.touches[0]
       const { len, rotation } = stateRef.current
       const local = screenToRoom(t.clientX - startX, t.clientY - startY, snapRoomRotation, snapScale)
-      const clamped = clampToRoom(origX + local.dx, origY + local.dy, len, rotation)
+      const clamped = clampToRoom(origX + local.dx, origY + local.dy, len, THICKNESS, rotation)
       updateState(prev => ({ ...prev, ...clamped }))
     }
     const onUp = () => {
@@ -207,7 +130,7 @@ export default function Wardrobe({ roomRotation, effectiveScale, value, onChange
     const cx0 = origX + origLen / 2, cy0 = origY + THICKNESS / 2
     const leftEndX = cx0 - (origLen / 2) * cos
     const leftEndY = cy0 - (origLen / 2) * sin
-    const maxLen = maxLenFromLeft(leftEndX, leftEndY, origRot)
+    const maxLen = maxLenFromEnd(leftEndX, leftEndY, origRot, THICKNESS, MIN_LEN, 1)
     const onMove = (ev: MouseEvent) => {
       const local = screenToRoom(ev.clientX - startX, ev.clientY - startY, snapRoomRotation, snapScale)
       const delta = local.dx * cos + local.dy * sin
@@ -238,7 +161,7 @@ export default function Wardrobe({ roomRotation, effectiveScale, value, onChange
     const cx0 = origX + origLen / 2, cy0 = origY + THICKNESS / 2
     const leftEndX = cx0 - (origLen / 2) * cos
     const leftEndY = cy0 - (origLen / 2) * sin
-    const maxLen = maxLenFromLeft(leftEndX, leftEndY, origRot)
+    const maxLen = maxLenFromEnd(leftEndX, leftEndY, origRot, THICKNESS, MIN_LEN, 1)
     const onMove = (ev: TouchEvent) => {
       ev.preventDefault()
       const t = ev.touches[0]
@@ -272,7 +195,7 @@ export default function Wardrobe({ roomRotation, effectiveScale, value, onChange
     const cx0 = origX + origLen / 2, cy0 = origY + THICKNESS / 2
     const rightEndX = cx0 + (origLen / 2) * cos
     const rightEndY = cy0 + (origLen / 2) * sin
-    const maxLen = maxLenFromRight(rightEndX, rightEndY, origRot)
+    const maxLen = maxLenFromEnd(rightEndX, rightEndY, origRot, THICKNESS, MIN_LEN, -1)
     const onMove = (ev: MouseEvent) => {
       const local = screenToRoom(ev.clientX - startX, ev.clientY - startY, snapRoomRotation, snapScale)
       const delta = -(local.dx * cos + local.dy * sin)
@@ -303,7 +226,7 @@ export default function Wardrobe({ roomRotation, effectiveScale, value, onChange
     const cx0 = origX + origLen / 2, cy0 = origY + THICKNESS / 2
     const rightEndX = cx0 + (origLen / 2) * cos
     const rightEndY = cy0 + (origLen / 2) * sin
-    const maxLen = maxLenFromRight(rightEndX, rightEndY, origRot)
+    const maxLen = maxLenFromEnd(rightEndX, rightEndY, origRot, THICKNESS, MIN_LEN, -1)
     const onMove = (ev: TouchEvent) => {
       ev.preventDefault()
       const t = ev.touches[0]

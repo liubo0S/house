@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { clampToRoom, screenToRoom } from '../geometry'
 
 const STORAGE_KEY = 'bedroom_bed_state'
 const BED_W = 200
 const BED_H = 220
-const ROOM_W = 460  // 外层 relative div 宽度（含 2px 边框）
-const ROOM_H = 370  // 外层 relative div 高度（含 2px 边框）
-const WALL_BUFFER = 2  // 等于边框宽度，使四面 clip 边界对称
 
 interface BedState {
   x: number
@@ -18,61 +16,24 @@ interface Props {
   effectiveScale: number
 }
 
-/** 将屏幕坐标增量转换为房间本地坐标增量 */
-function screenToRoom(dx: number, dy: number, roomRotation: number, scale: number) {
-  const angle = -(roomRotation * Math.PI) / 180
-  const sx = dx / scale, sy = dy / scale
-  return {
-    dx: sx * Math.cos(angle) - sy * Math.sin(angle),
-    dy: sx * Math.sin(angle) + sy * Math.cos(angle),
-  }
-}
-
-function clamp(v: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, v))
-}
-
-/** 根据旋转角计算旋转后包围盒，返回合法的 x/y 范围并约束 */
-function clampToRoom(x: number, y: number, rotation: number) {
-  const rad = (rotation * Math.PI) / 180
-  const cosR = Math.abs(Math.cos(rad))
-  const sinR = Math.abs(Math.sin(rad))
-  // 旋转后包围盒尺寸
-  const rw = BED_W * cosR + BED_H * sinR
-  const rh = BED_W * sinR + BED_H * cosR
-  // CSS left/top 指向元素左上角（未旋转坐标系），旋转以中心为原点
-  // 因此中心 = (x + BED_W/2, y + BED_H/2)
-  // 约束：中心 ± rw/2 在 [0, ROOM_W] 内
-  const xMin = rw / 2 - BED_W / 2 + WALL_BUFFER
-  const xMax = ROOM_W - rw / 2 - BED_W / 2 - WALL_BUFFER
-  const yMin = rh / 2 - BED_H / 2 + WALL_BUFFER
-  const yMax = ROOM_H - rh / 2 - BED_H / 2 - WALL_BUFFER
-  return {
-    x: clamp(x, xMin, Math.max(xMin, xMax)),
-    y: clamp(y, yMin, Math.max(yMin, yMax)),
-  }
-}
-
 function loadState(): BedState {
   try {
     const saved = localStorage.getItem(STORAGE_KEY)
     if (saved) {
       const parsed: BedState = JSON.parse(saved)
       // 清除旧版本中可能存在的越界位置
-      return { ...parsed, ...clampToRoom(parsed.x, parsed.y, parsed.rotation) }
+      return { ...parsed, ...clampToRoom(parsed.x, parsed.y, BED_W, BED_H, parsed.rotation) }
     }
-  } catch {}
+  } catch { /* localStorage 不可用或数据损坏时回退默认值 */ }
   return { x: 20, y: 80, rotation: 0 }
 }
 
 export default function Bed({ roomRotation, effectiveScale }: Props) {
   const [state, setState] = useState<BedState>(loadState)
   const stateRef = useRef(state)
-  stateRef.current = state
-
-  const bedRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    stateRef.current = state
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
   }, [state])
 
@@ -90,7 +51,7 @@ export default function Bed({ roomRotation, effectiveScale }: Props) {
     const onMove = (ev: MouseEvent) => {
       const { rotation } = stateRef.current
       const local = screenToRoom(ev.clientX - startX, ev.clientY - startY, snapRoomRotation, snapScale)
-      const clamped = clampToRoom(origX + local.dx, origY + local.dy, rotation)
+      const clamped = clampToRoom(origX + local.dx, origY + local.dy, BED_W, BED_H, rotation)
       setState(prev => ({ ...prev, ...clamped }))
     }
     const onUp = () => {
@@ -118,7 +79,7 @@ export default function Bed({ roomRotation, effectiveScale }: Props) {
       const t = ev.touches[0]
       const { rotation } = stateRef.current
       const local = screenToRoom(t.clientX - startX, t.clientY - startY, snapRoomRotation, snapScale)
-      const clamped = clampToRoom(origX + local.dx, origY + local.dy, rotation)
+      const clamped = clampToRoom(origX + local.dx, origY + local.dy, BED_W, BED_H, rotation)
       setState(prev => ({ ...prev, ...clamped }))
     }
     const onUp = () => {
@@ -133,14 +94,13 @@ export default function Bed({ roomRotation, effectiveScale }: Props) {
     e.stopPropagation()
     setState(prev => {
       const newRotation = prev.rotation + 90
-      const clamped = clampToRoom(prev.x, prev.y, newRotation)
+      const clamped = clampToRoom(prev.x, prev.y, BED_W, BED_H, newRotation)
       return { ...clamped, rotation: newRotation }
     })
   }, [])
 
   return (
     <div
-      ref={bedRef}
       style={{
         position: 'absolute',
         left: state.x,

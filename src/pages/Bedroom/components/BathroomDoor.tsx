@@ -1,30 +1,15 @@
 import { useCallback, useEffect, useRef } from 'react'
-
-const STORAGE_KEY = 'bedroom_bathroom_door_x'
-export const DOOR_W = 70
-const ROOM_W = 460
-const X_MIN = 293
-const X_MAX = ROOM_W - 2 - DOOR_W
-
-export function loadX(): number {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved) {
-      const x = Number(saved)
-      if (!isNaN(x)) return Math.max(X_MIN, Math.min(X_MAX, x))
-    }
-  } catch {}
-  return 350
-}
+import { clamp, screenToRoom } from '../geometry'
+import { DOOR_W, DOOR_X_MAX, DOOR_X_MIN, saveDoorX } from '../doorPosition'
 
 interface Props { x: number; onXChange: (x: number) => void; roomRotation: number; effectiveScale: number }
 
 export default function BathroomDoor({ x, onXChange, roomRotation, effectiveScale }: Props) {
   const xRef = useRef(x)
-  xRef.current = x
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, String(x))
+    xRef.current = x
+    saveDoorX(x)
   }, [x])
 
   const onMouseDown = useCallback((e: React.MouseEvent) => {
@@ -35,12 +20,9 @@ export default function BathroomDoor({ x, onXChange, roomRotation, effectiveScal
     const snapRoomRotation = roomRotation
     const snapScale = effectiveScale
     const onMove = (ev: MouseEvent) => {
-      const angle = -(snapRoomRotation * Math.PI) / 180
-      const sdx = (ev.clientX - startClientX) / snapScale
-      const sdy = (ev.clientY - startClientY) / snapScale
       // 厕所门只在房间 X 轴（水平）方向滑动，取本地 dx
-      const ldx = sdx * Math.cos(angle) - sdy * Math.sin(angle)
-      onXChange(Math.max(X_MIN, Math.min(X_MAX, startX + ldx)))
+      const local = screenToRoom(ev.clientX - startClientX, ev.clientY - startClientY, snapRoomRotation, snapScale)
+      onXChange(clamp(startX + local.dx, DOOR_X_MIN, DOOR_X_MAX))
     }
     const onUp = () => {
       window.removeEventListener('mousemove', onMove)

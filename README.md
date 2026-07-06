@@ -1,73 +1,54 @@
-# React + TypeScript + Vite
+# House Web · 卧室平面布局设计器
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+一个可交互的卧室平面图工具：在缩放/旋转的房间视图中拖拽、缩放、旋转家具，并将布局持久化到浏览器本地存储。基于 React 19 + TypeScript + Vite + Tailwind CSS v4 构建，部署于 GitHub Pages。
 
-Currently, two official plugins are available:
+## 功能
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **家具交互**：床、衣柜支持拖拽移动与点击旋转 90°；衣柜可通过两侧手柄调整长度。所有操作都被约束在房间边界内（含旋转后的包围盒计算）。
+- **自定义元素**：可新增带名称的元素并放入房间，支持删除模式逐个移除。
+- **房间视图控制**：整间房支持放大、缩小、旋转 90°，以及一键重置。
+- **移动端适配**：布局自动缩放以适应屏幕，拖拽同时支持鼠标与触摸。
+- **本地持久化**：床、衣柜、厕所门位置及自定义元素均保存在 `localStorage`，刷新后保留。
 
-## React Compiler
+## 技术栈
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+| 技术 | 用途 |
+| --- | --- |
+| React 19 | 组件化 UI 与并发渲染 |
+| TypeScript（strict） | 静态类型保障 |
+| Vite 8 | 开发服务器与生产构建 |
+| Tailwind CSS v4 | 原子化样式 |
+| React Router v7 | 页面路由 |
 
-## Expanding the ESLint configuration
+## 目录结构
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```
+src/
+├── App.tsx              路由定义
+├── main.tsx             应用入口（含 GitHub Pages basename 处理）
+└── pages/
+    ├── Home/            首页
+    └── Bedroom/         卧室页
+        ├── index.tsx    页面容器：工具栏、房间渲染、弹窗
+        └── components/  Bed / Wardrobe / BathroomDoor
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 本地开发
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev        # 启动开发服务器（默认 http://localhost:5173）
 ```
+
+## 常用脚本
+
+| 命令 | 说明 |
+| --- | --- |
+| `npm run dev` | 启动开发服务器（HMR） |
+| `npm run build` | 类型检查 + 生产构建，输出到 `dist/` |
+| `npm run lint` | 运行 ESLint |
+| `npm run preview` | 本地预览生产构建产物 |
+
+## 部署
+
+推送到 `main` 分支后，`.github/workflows/deploy.yml` 会自动构建并发布到 GitHub Pages。构建时通过 `GITHUB_ACTIONS` 环境变量将 `base` 设为 `/house/`，本地开发则为 `/`。
