@@ -19,19 +19,30 @@
 | Vite 8 | 开发服务器与生产构建 |
 | Tailwind CSS v4 | 原子化样式 |
 | React Router v7 | 页面路由 |
+| Vitest + Testing Library | 单元与组件测试 |
 
 ## 目录结构
 
 ```
 src/
 ├── App.tsx              路由定义
-├── main.tsx             应用入口（含 GitHub Pages basename 处理）
+├── main.tsx             应用入口（ErrorBoundary + GitHub Pages basename）
+├── components/          ErrorBoundary
+├── hooks/               usePersistentState / useLatestRef
 └── pages/
     ├── Home/            首页
     └── Bedroom/         卧室页
-        ├── index.tsx    页面容器：工具栏、房间渲染、弹窗
-        └── components/  Bed / Wardrobe / BathroomDoor
+        ├── index.tsx           页面容器：工具栏、房间渲染、弹窗
+        ├── furniture.ts        家具数据模型与种类规格（kind → 尺寸/是否可缩放）
+        ├── furnitureStore.ts   家具布局的加载/迁移/持久化
+        ├── geometry.ts         房间几何计算（含单元测试）
+        ├── useRoomDrag.ts      Pointer Events 拖拽 hook
+        ├── useAutoScale.ts     自适应缩放 hook
+        ├── components/         DraggableFurniture、Toolbar、Modal、弹窗、图标
+        └── views/              各家具外观（BedView / WardrobeView）+ 注册表
 ```
+
+新增一种家具：加一个 `views/XxxView.tsx`，在 `views/registry.ts` 注册，并在 `furniture.ts` 的 `KIND_SPECS` 补一条规格即可。
 
 ## 本地开发
 
@@ -47,8 +58,10 @@ npm run dev        # 启动开发服务器（默认 http://localhost:5173）
 | `npm run dev` | 启动开发服务器（HMR） |
 | `npm run build` | 类型检查 + 生产构建，输出到 `dist/` |
 | `npm run lint` | 运行 ESLint |
+| `npm test` | 运行 Vitest 单元/组件测试 |
+| `npm run test:watch` | 以 watch 模式运行测试 |
 | `npm run preview` | 本地预览生产构建产物 |
 
 ## 部署
 
-推送到 `main` 分支后，`.github/workflows/deploy.yml` 会自动构建并发布到 GitHub Pages。构建时通过 `GITHUB_ACTIONS` 环境变量将 `base` 设为 `/house/`，本地开发则为 `/`。
+推送到 `main` 分支后，`.github/workflows/deploy.yml` 会先执行 `lint` 与 `test`，通过后再构建并发布到 GitHub Pages；任一环节失败都会阻断部署。构建时通过 `GITHUB_ACTIONS` 环境变量将 `base` 设为 `/house/`，本地开发则为 `/`。
