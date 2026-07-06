@@ -8,6 +8,7 @@ import RoomElement, { type RoomElementItem } from './components/RoomElement'
 import Toolbar from './components/Toolbar'
 import { DOOR_W, loadDoorX } from './doorPosition'
 import { ROOM_H, ROOM_W } from './geometry'
+import { ENTRY_DOOR, NORTH_WINDOW, WEST_WINDOW } from './roomLayout'
 import { useAutoScale } from './useAutoScale'
 
 const MANUAL_ELEMENTS_KEY = 'bedroom_manual_wardrobes_state'
@@ -149,9 +150,9 @@ export default function BedroomPage() {
                   >
                     <span className="text-[9px] font-bold tracking-widest text-amber-200/65">厕所门</span>
                   </div>
-                  {/* 西墙窗户（贴在上方墙外，宽130，居中） */}
+                  {/* 西墙窗户（贴在上方墙外，居中） */}
                   <div
-                    style={{ position: 'absolute', top: -8, left: 163, width: 130, height: 8 }}
+                    style={{ position: 'absolute', top: -WEST_WINDOW.thickness, left: WEST_WINDOW.left, width: WEST_WINDOW.width, height: WEST_WINDOW.thickness }}
                     className="overflow-hidden rounded-t-sm"
                   >
                     <div className="flex h-full items-stretch gap-1 px-2">
@@ -161,9 +162,9 @@ export default function BedroomPage() {
                     </div>
                   </div>
 
-                  {/* 北墙窗户（贴在右侧墙外，高150，居中） */}
+                  {/* 北墙窗户（贴在右侧墙外，居中） */}
                   <div
-                    style={{ position: 'absolute', right: -8, top: 108, width: 8, height: 150 }}
+                    style={{ position: 'absolute', right: -NORTH_WINDOW.thickness, top: NORTH_WINDOW.top, width: NORTH_WINDOW.thickness, height: NORTH_WINDOW.height }}
                     className="overflow-hidden rounded-r-sm"
                   >
                     <div className="flex h-full flex-col items-stretch gap-1 py-2">
@@ -191,13 +192,13 @@ export default function BedroomPage() {
                     ))}
                     <BathroomDoor x={doorX} onXChange={setDoorX} roomRotation={roomRotation} effectiveScale={effectiveScale} />
 
-                    {/* 东墙门口（下方，左侧，宽85）铰链在左端（靠南墙），门扇向室内逆时针展开，开后靠南墙 */}
+                    {/* 东墙门口（下方，左侧）铰链在左端（靠南墙），门扇向室内逆时针展开，开后靠南墙 */}
                     {/* 门洞覆盖层：遮住该段虚线边框 */}
-                    <div style={{ position: 'absolute', left: 30, bottom: 0, width: 85, height: 6 }} className="bg-indigo-950/80" />
+                    <div style={{ position: 'absolute', left: ENTRY_DOOR.left, bottom: 0, width: ENTRY_DOOR.width, height: 6 }} className="bg-indigo-950/80" />
                     {/* 门扇（左侧竖线，开启位置靠南墙）+ 开合弧（圆心=铰链=左下角，从左上逆时针扫到右下） */}
                     <div
                       style={{
-                        position: 'absolute', left: 30, bottom: 0, width: 85, height: 85,
+                        position: 'absolute', left: ENTRY_DOOR.left, bottom: 0, width: ENTRY_DOOR.width, height: ENTRY_DOOR.width,
                         borderLeft: '2px solid rgba(251,191,36,0.7)',
                         borderTop: '1.5px dashed rgba(251,191,36,0.45)',
                         borderRight: '1.5px dashed rgba(251,191,36,0.45)',
