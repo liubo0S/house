@@ -1,18 +1,22 @@
-import { type FormEvent, useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import AddElementDialog from './components/AddElementDialog'
 import BathroomDoor from './components/BathroomDoor'
 import Bed from './components/Bed'
-import Wardrobe, { type WardrobeItem } from './components/Wardrobe'
+import ConfirmDeleteDialog from './components/ConfirmDeleteDialog'
+import RoomElement, { type RoomElementItem } from './components/RoomElement'
+import Toolbar from './components/Toolbar'
 import { DOOR_W, loadDoorX } from './doorPosition'
 import { ROOM_H, ROOM_W } from './geometry'
+import { useAutoScale } from './useAutoScale'
 
-const MANUAL_WARDROBES_KEY = 'bedroom_manual_wardrobes_state'
-const WARDROBE_THICKNESS = 60
+const MANUAL_ELEMENTS_KEY = 'bedroom_manual_wardrobes_state'
+const ELEMENT_THICKNESS = 60
 const MANUAL_DEFAULT_LEN = 100
 
-function loadManualWardrobes(): WardrobeItem[] {
+function loadManualElements(): RoomElementItem[] {
   try {
-    const saved = localStorage.getItem(MANUAL_WARDROBES_KEY)
+    const saved = localStorage.getItem(MANUAL_ELEMENTS_KEY)
     if (!saved) return []
     const parsed = JSON.parse(saved)
     if (!Array.isArray(parsed)) return []
@@ -22,10 +26,10 @@ function loadManualWardrobes(): WardrobeItem[] {
   }
 }
 
-function createManualWardrobe(name: string, count: number): WardrobeItem {
+function createManualElement(name: string, count: number): RoomElementItem {
   const offset = (count % 6) * 14
   const x = Math.min(ROOM_W - MANUAL_DEFAULT_LEN - 16, 24 + offset)
-  const y = Math.min(ROOM_H - WARDROBE_THICKNESS - 16, 24 + offset)
+  const y = Math.min(ROOM_H - ELEMENT_THICKNESS - 16, 24 + offset)
   return {
     id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     name,
@@ -38,14 +42,11 @@ function createManualWardrobe(name: string, count: number): WardrobeItem {
 
 export default function BedroomPage() {
   const [doorX, setDoorX] = useState(loadDoorX)
-  const cardRef = useRef<HTMLDivElement>(null)
-  const [naturalSize, setNaturalSize] = useState({ w: 0, h: 0 })
-  const [autoScale, setAutoScale] = useState(1)
+  const { cardRef, naturalSize, autoScale } = useAutoScale()
   const [userZoom, setUserZoom] = useState(1)
   const [roomRotation, setRoomRotation] = useState(0)
-  const [manualWardrobes, setManualWardrobes] = useState<WardrobeItem[]>(loadManualWardrobes)
+  const [manualElements, setManualElements] = useState<RoomElementItem[]>(loadManualElements)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-  const [newElementName, setNewElementName] = useState('')
   const [deleteMode, setDeleteMode] = useState(false)
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
@@ -53,51 +54,25 @@ export default function BedroomPage() {
   const isRotated90 = roomRotation % 180 !== 0
   const visualW = naturalSize.w ? (isRotated90 ? naturalSize.h : naturalSize.w) * effectiveScale : undefined
   const visualH = naturalSize.w ? (isRotated90 ? naturalSize.w : naturalSize.h) * effectiveScale : undefined
-  const pendingDeleteName = manualWardrobes.find(item => item.id === pendingDeleteId)?.name
+  const pendingDeleteName = manualElements.find(item => item.id === pendingDeleteId)?.name
 
   useEffect(() => {
-    const update = () => {
-      const card = cardRef.current
-      if (!card) return
-      const nw = card.scrollWidth
-      const nh = card.scrollHeight
-      setNaturalSize({ w: nw, h: nh })
-      // main px-6 = 48px; reserve ~200px for nav + padding + toolbar
-      const availW = window.innerWidth - 48
-      const availH = window.innerHeight - 200
-      setAutoScale(Math.min(1, availW / nw, availH / nh))
-    }
-    update()
-    window.addEventListener('resize', update)
-    return () => window.removeEventListener('resize', update)
-  }, [])
+    localStorage.setItem(MANUAL_ELEMENTS_KEY, JSON.stringify(manualElements))
+  }, [manualElements])
 
-  useEffect(() => {
-    localStorage.setItem(MANUAL_WARDROBES_KEY, JSON.stringify(manualWardrobes))
-  }, [manualWardrobes])
-
-  const openAddDialog = () => {
-    setNewElementName('')
-    setIsAddDialogOpen(true)
-  }
-
-  const addManualWardrobe = (e: FormEvent) => {
-    e.preventDefault()
-    const name = newElementName.trim()
-    if (!name) return
-    setManualWardrobes(prev => [...prev, createManualWardrobe(name, prev.length)])
+  const addManualElement = (name: string) => {
+    setManualElements(prev => [...prev, createManualElement(name, prev.length)])
     setIsAddDialogOpen(false)
-    setNewElementName('')
   }
 
-  const updateManualWardrobe = (id: string | undefined, next: WardrobeItem) => {
+  const updateManualElement = (id: string | undefined, next: RoomElementItem) => {
     if (!id) return
-    setManualWardrobes(prev => prev.map(item => (item.id === id ? { ...next, id, name: item.name } : item)))
+    setManualElements(prev => prev.map(item => (item.id === id ? { ...next, id, name: item.name } : item)))
   }
 
-  const confirmDeleteManualWardrobe = () => {
+  const confirmDelete = () => {
     if (!pendingDeleteId) return
-    setManualWardrobes(prev => prev.filter(item => item.id !== pendingDeleteId))
+    setManualElements(prev => prev.filter(item => item.id !== pendingDeleteId))
     setPendingDeleteId(null)
   }
 
@@ -117,63 +92,12 @@ export default function BedroomPage() {
       </nav>
 
       <section className="mx-auto flex max-w-6xl flex-col items-center py-4 lg:py-10">
-        {/* 工具栏 */}
-        <div className="mb-4 inline-flex items-center gap-0.5 rounded-full border border-white/15 bg-white/10 p-1 backdrop-blur shadow-lg shadow-black/20">
-          {/* 放大 */}
-          <button
-            onClick={() => setUserZoom(z => Math.min(2.5, +(z + 0.15).toFixed(2)))}
-            title="放大"
-            className="grid size-9 place-items-center rounded-full text-slate-200 transition hover:bg-white/15 active:scale-90"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              <line x1="11" y1="8" x2="11" y2="14" />
-              <line x1="8" y1="11" x2="14" y2="11" />
-            </svg>
-          </button>
-
-          {/* 缩小 */}
-          <button
-            onClick={() => setUserZoom(z => Math.max(0.3, +(z - 0.15).toFixed(2)))}
-            title="缩小"
-            className="grid size-9 place-items-center rounded-full text-slate-200 transition hover:bg-white/15 active:scale-90"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              <line x1="8" y1="11" x2="14" y2="11" />
-            </svg>
-          </button>
-
-          <div className="h-4 w-px bg-white/25 mx-0.5" />
-
-          {/* 旋转 */}
-          <button
-            onClick={() => setRoomRotation(r => r + 90)}
-            title="旋转 90°"
-            className="grid size-9 place-items-center rounded-full text-slate-200 transition hover:bg-white/15 active:scale-90"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 2v6h-6" />
-              <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
-            </svg>
-          </button>
-
-          <div className="h-4 w-px bg-white/25 mx-0.5" />
-
-          {/* 重置 */}
-          <button
-            onClick={() => { setUserZoom(1); setRoomRotation(0) }}
-            title="重置"
-            className="grid size-9 place-items-center rounded-full text-slate-400 transition hover:bg-white/15 hover:text-slate-200 active:scale-90"
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-              <path d="M3 3v5h5" />
-            </svg>
-          </button>
-        </div>
+        <Toolbar
+          onZoomIn={() => setUserZoom(z => Math.min(2.5, +(z + 0.15).toFixed(2)))}
+          onZoomOut={() => setUserZoom(z => Math.max(0.3, +(z - 0.15).toFixed(2)))}
+          onRotate={() => setRoomRotation(r => r + 90)}
+          onReset={() => { setUserZoom(1); setRoomRotation(0) }}
+        />
 
         {/* 缩放/旋转包装层：transform 不影响布局，需手动指定 visual 尺寸 */}
         <div
@@ -252,16 +176,16 @@ export default function BedroomPage() {
                   {/* 房间平面图容器（overflow-hidden 裁剪床） */}
                   <div className="isolate size-full overflow-hidden rounded-2xl border-2 border-dashed border-amber-300/40 bg-indigo-950/60">
                     <Bed roomRotation={roomRotation} effectiveScale={effectiveScale} />
-                    <Wardrobe roomRotation={roomRotation} effectiveScale={effectiveScale} />
-                    {manualWardrobes.map(item => (
-                      <Wardrobe
+                    <RoomElement roomRotation={roomRotation} effectiveScale={effectiveScale} />
+                    {manualElements.map(item => (
+                      <RoomElement
                         key={item.id}
                         value={item}
                         isManual
                         deleteMode={deleteMode}
                         roomRotation={roomRotation}
                         effectiveScale={effectiveScale}
-                        onChange={next => updateManualWardrobe(item.id, next)}
+                        onChange={next => updateManualElement(item.id, next)}
                         onDeleteClick={() => setPendingDeleteId(item.id ?? null)}
                       />
                     ))}
@@ -312,7 +236,7 @@ export default function BedroomPage() {
         <div className="mt-6 flex items-center gap-3 rounded-full border border-white/10 bg-white/10 p-1.5 shadow-lg shadow-black/20 backdrop-blur">
           <button
             type="button"
-            onClick={openAddDialog}
+            onClick={() => setIsAddDialogOpen(true)}
             className="rounded-full bg-amber-300 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-200 active:scale-95"
           >
             新增元素
@@ -320,7 +244,7 @@ export default function BedroomPage() {
           <button
             type="button"
             onClick={() => setDeleteMode(mode => !mode)}
-            disabled={manualWardrobes.length === 0}
+            disabled={manualElements.length === 0}
             className="rounded-full border border-white/15 px-5 py-2 text-sm font-semibold text-slate-100 transition hover:border-red-300/70 hover:bg-red-400/20 active:scale-95 disabled:cursor-not-allowed disabled:opacity-45"
           >
             删除元素
@@ -329,60 +253,15 @@ export default function BedroomPage() {
       </section>
 
       {isAddDialogOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/65 px-6 backdrop-blur-sm">
-          <form onSubmit={addManualWardrobe} className="w-full max-w-sm rounded-3xl border border-white/15 bg-slate-900/95 p-6 shadow-2xl shadow-black/50">
-            <h2 className="text-lg font-semibold text-amber-100">新增元素</h2>
-            <p className="mt-2 text-sm text-slate-300">请输入元素名称，确认后会添加到房间中。</p>
-            <input
-              autoFocus
-              value={newElementName}
-              onChange={e => setNewElementName(e.target.value)}
-              placeholder="请输入名称"
-              className="mt-5 w-full rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-amber-200/70"
-            />
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setIsAddDialogOpen(false)}
-                className="rounded-full border border-white/15 px-4 py-2 text-sm text-slate-200 transition hover:bg-white/10"
-              >
-                取消
-              </button>
-              <button
-                type="submit"
-                disabled={!newElementName.trim()}
-                className="rounded-full bg-amber-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                确认
-              </button>
-            </div>
-          </form>
-        </div>
+        <AddElementDialog onSubmit={addManualElement} onClose={() => setIsAddDialogOpen(false)} />
       )}
 
       {pendingDeleteId && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/65 px-6 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-3xl border border-white/15 bg-slate-900/95 p-6 shadow-2xl shadow-black/50">
-            <h2 className="text-lg font-semibold text-red-100">确认删除</h2>
-            <p className="mt-2 text-sm text-slate-300">确认删除「{pendingDeleteName}」吗？该操作不可恢复。</p>
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setPendingDeleteId(null)}
-                className="rounded-full border border-white/15 px-4 py-2 text-sm text-slate-200 transition hover:bg-white/10"
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                onClick={confirmDeleteManualWardrobe}
-                className="rounded-full bg-red-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-400"
-              >
-                确认
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDeleteDialog
+          name={pendingDeleteName}
+          onConfirm={confirmDelete}
+          onClose={() => setPendingDeleteId(null)}
+        />
       )}
     </main>
   )

@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ROOM_H, ROOM_W, clamp, clampToRoom, maxLenFromEnd } from '../geometry'
 import { type DragDelta, useRoomDrag } from '../useRoomDrag'
+import { RotateIcon } from './icons'
 
 const STORAGE_KEY = 'bedroom_wardrobe_state'
 const THICKNESS = 60
 const DEFAULT_LEN = 260
 const MIN_LEN = 60
 
-export interface WardrobeItem {
+export interface RoomElementItem {
   id?: string
   name?: string
   x: number
@@ -19,21 +20,21 @@ export interface WardrobeItem {
 interface Props {
   roomRotation: number
   effectiveScale: number
-  value?: WardrobeItem
-  onChange?: (value: WardrobeItem) => void
+  value?: RoomElementItem
+  onChange?: (value: RoomElementItem) => void
   isManual?: boolean
   deleteMode?: boolean
   onDeleteClick?: () => void
 }
 
-function normalizeState(state: WardrobeItem): WardrobeItem {
+function normalizeState(state: RoomElementItem): RoomElementItem {
   const len = Math.max(MIN_LEN, state.len || MIN_LEN)
   const rotation = state.rotation || 0
   const clamped = clampToRoom(state.x, state.y, len, THICKNESS, rotation)
   return { ...state, ...clamped, len, rotation }
 }
 
-function loadState(): WardrobeItem {
+function loadState(): RoomElementItem {
   try {
     const saved = localStorage.getItem(STORAGE_KEY)
     if (saved) return normalizeState(JSON.parse(saved))
@@ -57,7 +58,7 @@ interface ResizeStart {
   sign: 1 | -1
 }
 
-function resizeStart(s: WardrobeItem, sign: 1 | -1): ResizeStart {
+function resizeStart(s: RoomElementItem, sign: 1 | -1): ResizeStart {
   const rad = (s.rotation * Math.PI) / 180
   const cos = Math.cos(rad)
   const sin = Math.sin(rad)
@@ -70,7 +71,7 @@ function resizeStart(s: WardrobeItem, sign: 1 | -1): ResizeStart {
   return { cos, sin, endX, endY, origLen: s.len, maxLen, sign }
 }
 
-function resizeApply(local: { dx: number; dy: number }, st: ResizeStart): Pick<WardrobeItem, 'x' | 'y' | 'len'> {
+function resizeApply(local: { dx: number; dy: number }, st: ResizeStart): Pick<RoomElementItem, 'x' | 'y' | 'len'> {
   const delta = st.sign * (local.dx * st.cos + local.dy * st.sin)
   const newLen = clamp(st.origLen + delta, MIN_LEN, st.maxLen)
   const newCx = st.endX + st.sign * (newLen / 2) * st.cos
@@ -78,12 +79,12 @@ function resizeApply(local: { dx: number; dy: number }, st: ResizeStart): Pick<W
   return { x: newCx - newLen / 2, y: newCy - THICKNESS / 2, len: newLen }
 }
 
-export default function Wardrobe({ roomRotation, effectiveScale, value, onChange, isManual = false, deleteMode = false, onDeleteClick }: Props) {
-  const [internalState, setInternalState] = useState<WardrobeItem>(loadState)
+export default function RoomElement({ roomRotation, effectiveScale, value, onChange, isManual = false, deleteMode = false, onDeleteClick }: Props) {
+  const [internalState, setInternalState] = useState<RoomElementItem>(loadState)
   const state = value ? normalizeState(value) : internalState
   const stateRef = useRef(state)
 
-  const updateState = useCallback((updater: (prev: WardrobeItem) => WardrobeItem) => {
+  const updateState = useCallback((updater: (prev: RoomElementItem) => RoomElementItem) => {
     const next = normalizeState(updater(stateRef.current))
     if (value && onChange) onChange(next)
     else setInternalState(next)
@@ -96,7 +97,7 @@ export default function Wardrobe({ roomRotation, effectiveScale, value, onChange
 
   // 拖拽移动
   const onDragStart = useCallback(() => ({ ...stateRef.current }), [])
-  const onDrag = useCallback(({ local }: DragDelta, start: WardrobeItem) => {
+  const onDrag = useCallback(({ local }: DragDelta, start: RoomElementItem) => {
     const clamped = clampToRoom(start.x + local.dx, start.y + local.dy, start.len, THICKNESS, start.rotation)
     updateState(prev => ({ ...prev, ...clamped }))
   }, [updateState])
@@ -173,10 +174,10 @@ export default function Wardrobe({ roomRotation, effectiveScale, value, onChange
           data-delete-handle
           type="button"
           title="删除元素"
+          aria-label={name ? `删除元素 ${name}` : '删除元素'}
           style={{ position: 'absolute', top: -9, right: -9, zIndex: 20, transform: `rotate(${-rotation}deg)` }}
           className="grid size-5 place-items-center rounded-full border border-white/70 bg-red-500 text-sm font-bold leading-none text-white shadow-md shadow-black/30 transition-transform hover:scale-110 active:scale-95"
-          onMouseDown={e => { e.preventDefault(); e.stopPropagation() }}
-          onTouchStart={e => { e.preventDefault(); e.stopPropagation() }}
+          onPointerDown={e => e.stopPropagation()}
           onClick={e => { e.preventDefault(); e.stopPropagation(); onDeleteClick?.() }}
         >
           <span className="-mt-px block leading-none">−</span>
@@ -184,18 +185,17 @@ export default function Wardrobe({ roomRotation, effectiveScale, value, onChange
       )}
 
       {/* 旋转按钮 */}
-      <div
+      <button
         data-rotate-handle
+        type="button"
         title="点击旋转 90°"
+        aria-label="旋转 90°"
         style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 10 }}
-        className="grid size-7 cursor-pointer place-items-center rounded-full border border-amber-100/40 bg-amber-300 shadow-md shadow-black/30 transition-transform hover:scale-110 active:scale-95"
+        className="grid size-7 cursor-pointer place-items-center rounded-full border border-amber-100/40 bg-amber-300 p-0 text-slate-900 shadow-md shadow-black/30 transition-transform hover:scale-110 active:scale-95"
         onClick={onRotateClick}
       >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-900">
-          <path d="M21 2v6h-6" />
-          <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
-        </svg>
-      </div>
+        <RotateIcon />
+      </button>
 
       {/* 左侧长度调整 handle */}
       <div

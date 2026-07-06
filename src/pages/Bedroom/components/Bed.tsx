@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { clampToRoom } from '../geometry'
 import { type DragDelta, useRoomDrag } from '../useRoomDrag'
+import { RotateIcon } from './icons'
 
 const STORAGE_KEY = 'bedroom_bed_state'
 const BED_W = 200
@@ -96,18 +97,17 @@ export default function Bed({ roomRotation, effectiveScale }: Props) {
       </div>
 
       {/* 旋转按钮：点击旋转 90° */}
-      <div
+      <button
         data-rotate-handle
+        type="button"
         title="点击旋转 90°"
+        aria-label="旋转床 90°"
         style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 10 }}
-        className="grid size-7 cursor-pointer place-items-center rounded-full border border-amber-100/40 bg-amber-300 shadow-md shadow-black/30 transition-transform hover:scale-110 active:scale-95"
+        className="grid size-7 cursor-pointer place-items-center rounded-full border border-amber-100/40 bg-amber-300 p-0 text-slate-900 shadow-md shadow-black/30 transition-transform hover:scale-110 active:scale-95"
         onClick={onRotateClick}
       >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-900">
-          <path d="M21 2v6h-6" />
-          <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
-        </svg>
-      </div>
+        <RotateIcon />
+      </button>
     </div>
   )
 }
